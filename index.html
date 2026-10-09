@@ -457,6 +457,7 @@
     <header id="top" class="panel">
       <h1>GAZACKTIC SEANQUEST</h1>
       <div id="turn"></div>
+      <button class="btn" data-act="newgame" title="Open the new-game menu">New game</button>
       <button
         class="btn"
         data-act="era"
@@ -659,11 +660,12 @@
           p.name = String(p.name || d.players[i].name);
           p.faction = String(p.faction || "");
           if (!/^#[0-9a-f]{6}$/i.test(p.color)) p.color = d.players[i].color;
-          p.credits = +p.credits || 0;
+          p.credits = Math.max(0, +p.credits || 0);
           p.movesBought = +p.movesBought || 0;
           if (p.lastStandAt === undefined) p.lastStandAt = null;
         });
         s.rules = Object.assign(d.rules, s.rules || {});
+        for (const k in s.rules) s.rules[k] = Math.max(0, +s.rules[k] || 0);
         s.nodes.forEach((n) => {
           n.x = +n.x || 0;
           n.z = +n.z || 0;
@@ -2154,7 +2156,9 @@
               '"></div>' +
               '<div class="cr"><button class="btn" data-act="cred:' +
               i +
-              ':-50">−</button><input type="number" step="50" data-f="pcredits" data-i="' +
+              ':-50"' +
+              (p.credits <= 0 ? " disabled" : "") +
+              '>−</button><input type="number" min="0" step="50" data-f="pcredits" data-i="' +
               i +
               '" value="' +
               p.credits +
@@ -2297,7 +2301,7 @@
         (r) =>
           '<div class="row"><label style="flex-basis:150px">' +
           r[1] +
-          '</label><input type="number" step="50" id="rule-' +
+          '</label><input type="number" min="0" step="50" id="rule-' +
           r[0] +
           '" data-f="rule" data-i="' +
           r[0] +
@@ -2336,7 +2340,7 @@
             break;
           case "cred":
             mutate(() => {
-              state.players[+a].credits += +c;
+              state.players[+a].credits = Math.max(0, state.players[+a].credits + +c);
             });
             break;
           case "own":
@@ -2440,8 +2444,8 @@
           } else if (f === "pname") state.players[+i].name = t.value || "Player " + (+i + 1);
           else if (f === "pcolor") state.players[+i].color = t.value;
           else if (f === "pfaction") state.players[+i].faction = t.value;
-          else if (f === "pcredits") state.players[+i].credits = Math.round(+t.value) || 0;
-          else if (f === "rule") state.rules[i] = +t.value || 0;
+          else if (f === "pcredits") state.players[+i].credits = Math.max(0, Math.round(+t.value) || 0);
+          else if (f === "rule") state.rules[i] = Math.max(0, +t.value || 0);
         });
       });
 
