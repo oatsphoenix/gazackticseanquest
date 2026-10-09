@@ -1,0 +1,2216 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>GaZacktic Seanquest</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <style>
+      :root {
+        --cy: #39c5ff;
+        --or: #ffb648;
+        --bg: rgba(3, 12, 28, 0.84);
+        --line: rgba(57, 197, 255, 0.42);
+        --txt: #cfeaff;
+        --dim: #7fa3bd;
+      }
+      * {
+        box-sizing: border-box;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(57, 197, 255, 0.42) transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+        color: var(--txt);
+        font:
+          13px/1.35 "Eurostile",
+          "Bank Gothic",
+          "Agency FB",
+          "Segoe UI",
+          system-ui,
+          sans-serif;
+        letter-spacing: 0.05em;
+      }
+      #c {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        cursor: grab;
+      }
+      #labels {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        overflow: hidden;
+      }
+      .lbl {
+        position: absolute;
+        left: 0;
+        top: 0;
+        text-align: center;
+        white-space: nowrap;
+        text-transform: uppercase;
+        font-size: 11px;
+        text-shadow:
+          0 0 5px #000,
+          0 0 2px #000,
+          0 0 9px #000;
+        will-change: transform;
+      }
+      .lbl .nm {
+        font-weight: 600;
+        letter-spacing: 0.12em;
+      }
+      .lbl .pips {
+        display: flex;
+        gap: 3px;
+        justify-content: center;
+        margin-top: 2px;
+      }
+      .lbl .pips i {
+        width: 9px;
+        height: 5px;
+        background: #52626f;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+      }
+      .lbl.lane {
+        font-size: 10px;
+        color: #001018;
+        background: var(--cy);
+        padding: 0 5px;
+        border-radius: 8px;
+        text-shadow: none;
+        font-weight: 700;
+      }
+      .lbl.sp {
+        color: var(--dim);
+        font-size: 10px;
+      }
+
+      .panel {
+        position: fixed;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        backdrop-filter: blur(3px);
+        box-shadow:
+          0 0 18px rgba(57, 197, 255, 0.12),
+          inset 0 0 30px rgba(57, 197, 255, 0.05);
+      }
+      #top {
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 46px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 14px;
+        border-width: 0 0 1px;
+      }
+      #top h1 {
+        margin: 0;
+        font-size: 17px;
+        letter-spacing: 0.28em;
+        color: var(--or);
+        text-shadow: 0 0 10px rgba(255, 182, 72, 0.5);
+        font-weight: 600;
+      }
+      #turn {
+        flex: 1;
+        text-align: center;
+        text-transform: uppercase;
+        font-size: 13px;
+      }
+      #turn b {
+        color: var(--or);
+      }
+      #turn .dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        margin: 0 6px -1px 10px;
+      }
+      #left {
+        top: 56px;
+        left: 10px;
+        width: 262px;
+        max-height: calc(100% - 66px);
+        overflow: auto;
+        padding: 10px;
+      }
+      #right {
+        top: 56px;
+        right: 10px;
+        width: 344px;
+        max-height: calc(100% - 66px);
+        overflow: auto;
+        padding: 10px;
+      }
+      #log {
+        bottom: 10px;
+        left: 282px;
+        right: 364px;
+        height: 92px;
+        overflow: auto;
+        padding: 6px 10px;
+        font-size: 11px;
+        color: var(--dim);
+      }
+      #log div:first-child {
+        color: var(--txt);
+      }
+      h2 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        letter-spacing: 0.22em;
+        color: var(--or);
+        text-transform: uppercase;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 4px;
+        font-weight: 600;
+      }
+      section {
+        margin-bottom: 14px;
+      }
+      .btn,
+      .chip {
+        background: rgba(57, 197, 255, 0.09);
+        border: 1px solid var(--line);
+        color: var(--txt);
+        padding: 4px 8px;
+        font: inherit;
+        font-size: 11px;
+        text-transform: uppercase;
+        cursor: pointer;
+        letter-spacing: 0.08em;
+      }
+      .btn:hover,
+      .chip:hover {
+        background: rgba(57, 197, 255, 0.28);
+        border-color: var(--cy);
+      }
+      .btn.on {
+        background: var(--or);
+        color: #120a00;
+        border-color: var(--or);
+      }
+      .btn.warn {
+        border-color: #ff6a5a;
+        color: #ffb0a6;
+      }
+      .btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+      .chip {
+        padding: 1px 0;
+        width: 22px;
+        text-align: center;
+      }
+      .chip.on {
+        background: var(--pc, #52626f);
+        color: #000;
+        border-color: #fff;
+        font-weight: 700;
+      }
+      .chip.b {
+        width: auto;
+        padding: 1px 5px;
+        border-color: var(--pc);
+        color: var(--pc);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
+      }
+      .grid3 {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 5px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 5px 0;
+      }
+      .row label {
+        flex: 0 0 78px;
+        color: var(--dim);
+        text-transform: uppercase;
+        font-size: 10px;
+      }
+      .row > input,
+      .row > select {
+        flex: 1;
+        min-width: 0;
+      }
+      input,
+      select {
+        background: rgba(0, 10, 24, 0.8);
+        border: 1px solid var(--line);
+        color: var(--txt);
+        padding: 3px 5px;
+        font: inherit;
+        font-size: 12px;
+      }
+      input[type="color"] {
+        padding: 0;
+        height: 22px;
+        flex: 0 0 34px;
+      }
+      input[type="checkbox"] {
+        flex: 0 0 auto;
+      }
+      input:disabled,
+      select:disabled {
+        opacity: 0.55;
+      }
+      .map {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        margin: 4px 0;
+      }
+      .map .mn {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .map input.mn {
+        flex: 1;
+      }
+      .pl {
+        border: 1px solid var(--line);
+        padding: 8px;
+        margin-bottom: 10px;
+        border-left: 4px solid var(--pc);
+      }
+      .pl.cur {
+        box-shadow: 0 0 14px var(--pc);
+        background: rgba(57, 197, 255, 0.06);
+      }
+      .pl .hd {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        text-transform: uppercase;
+      }
+      .pl .hd b {
+        font-size: 15px;
+        color: var(--pc);
+        letter-spacing: 0.14em;
+      }
+      .pl .cr {
+        font-size: 24px;
+        color: var(--or);
+        margin: 4px 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pl .cr input {
+        width: 92px;
+        font-size: 20px;
+        color: var(--or);
+        text-align: right;
+      }
+      .pl .st {
+        color: var(--dim);
+        font-size: 11px;
+        margin-bottom: 6px;
+        text-transform: uppercase;
+      }
+      .tag {
+        font-size: 10px;
+        background: var(--or);
+        color: #000;
+        padding: 0 5px;
+        margin-left: auto;
+      }
+      .hint {
+        color: var(--dim);
+        font-size: 11px;
+        margin-top: 6px;
+        min-height: 30px;
+      }
+      .fl {
+        display: flex;
+        gap: 4px;
+        align-items: center;
+        margin: 3px 0;
+      }
+      .fl .btn {
+        flex: 1;
+        text-align: left;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fl .btn.warn {
+        flex: 0 0 auto;
+      }
+      details summary {
+        cursor: pointer;
+        color: var(--or);
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        font-size: 12px;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 4px;
+        margin-bottom: 8px;
+      }
+      body.play .edit-only {
+        display: none !important;
+      }
+      #toast {
+        position: fixed;
+        left: 50%;
+        top: 64px;
+        transform: translateX(-50%);
+        background: var(--or);
+        color: #000;
+        padding: 6px 16px;
+        font-weight: 700;
+        text-transform: uppercase;
+        opacity: 0;
+        transition: opacity 0.25s;
+        pointer-events: none;
+      }
+      #toast.show {
+        opacity: 1;
+      }
+      #err {
+        display: none;
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #a00;
+        color: #fff;
+        padding: 6px 12px;
+        z-index: 99;
+        font-family: monospace;
+      }
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--line);
+      }
+    </style>
+  </head>
+  <body class="edit">
+    <canvas id="c"></canvas>
+    <div id="labels"></div>
+
+    <header id="top" class="panel">
+      <h1>GAZACKTIC SEANQUEST</h1>
+      <div id="turn"></div>
+      <button
+        class="btn"
+        data-act="era"
+        title="Roll a d6 for the era of the next fight (odd = Clone Wars, even = Galactic Civil War)"
+      >
+        Roll era
+      </button>
+      <button class="btn" data-act="endturn" title="Pay income to the current player and pass the turn">
+        End turn
+      </button>
+      <button class="btn" data-act="undo" title="Ctrl+Z">Undo</button>
+      <button class="btn on" id="modeBtn" data-act="mode" title="Edit mode shows the board-building tools">
+        Edit mode
+      </button>
+    </header>
+
+    <aside id="left" class="panel">
+      <h2>Commanders</h2>
+      <div id="players"></div>
+    </aside>
+
+    <aside id="right" class="panel">
+      <section class="edit-only">
+        <h2>Board tools</h2>
+        <div class="grid3" id="tools">
+          <button class="btn" data-act="tool:select">Select</button>
+          <button class="btn" data-act="tool:move">Move</button>
+          <button class="btn" data-act="tool:delete">Delete</button>
+          <button class="btn" data-act="tool:planet">+ Planet</button>
+          <button class="btn" data-act="tool:space">+ Space</button>
+          <button class="btn" data-act="tool:lane">+ Lane</button>
+        </div>
+        <div class="hint" id="hint"></div>
+      </section>
+      <section>
+        <h2>Selection</h2>
+        <div id="sel"></div>
+      </section>
+      <details>
+        <summary>Rules</summary>
+        <div id="rules"></div>
+      </details>
+      <details style="margin-top: 12px">
+        <summary>Board data</summary>
+        <div class="grid">
+          <button class="btn" data-act="export" title="Download the whole game as a JSON file">Export</button>
+          <button class="btn" data-act="import" title="Load a JSON file exported from here">Import</button>
+          <button
+            class="btn warn"
+            data-act="newgame"
+            title="Keep the board; clear ownership, fleets, credits and turn"
+          >
+            New game
+          </button>
+          <button
+            class="btn warn"
+            data-act="reset"
+            title="Throw away everything and restore the default board"
+          >
+            Reset board
+          </button>
+        </div>
+        <div class="hint">Saved automatically in this browser. Export a file to share the board.</div>
+        <input type="file" id="file" accept=".json,application/json" hidden />
+      </details>
+    </aside>
+
+    <div id="log" class="panel"></div>
+    <div id="toast"></div>
+    <div id="err"></div>
+
+    <script src="three.js"></script>
+    <script>
+      "use strict";
+      window.addEventListener("error", (e) => {
+        const b = document.getElementById("err");
+        b.textContent = "Error: " + e.message + " (line " + e.lineno + ")";
+        b.style.display = "block";
+      });
+
+      // ───────────────────────────── state ─────────────────────────────
+      const KEY = "gazacktic-seanquest.v1";
+      const $ = (id) => document.getElementById(id);
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"']/g,
+          (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+        );
+      const uid = (p) => p + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36);
+
+      const RULES = [
+        ["incomePerMap", "Income / map", 50],
+        ["capitalBonus", "Capital bonus", 50],
+        ["battleWin", "Battle: winner", 300],
+        ["battleLoss", "Battle: loser", 100],
+        ["fleetBase", "2nd fleet (doubles)", 500],
+        ["hero", "Hero", 400],
+        ["moveBase", "1st move pt (doubles)", 100],
+        ["factionPick", "Faction pick", 300],
+        ["lastStand", "Last stand", 300],
+      ];
+
+      function defaultState() {
+        const P = (id, name, type, size, x, z, maps, extra) =>
+          Object.assign(
+            {
+              id,
+              kind: "planet",
+              name,
+              type,
+              size,
+              x,
+              z,
+              ring: false,
+              capital: false,
+              maps: maps.map((m) => ({ name: m, owner: -1 })),
+            },
+            extra,
+          );
+        const S = (id, x, z) => ({ id, kind: "space", name: "Open space", x, z });
+        const lanes = [
+          ["p10", "p7"],
+          ["p10", "p9"],
+          ["p9", "s3"],
+          ["s3", "p8"],
+          ["p7", "p4"],
+          ["p7", "p6"],
+          ["p7", "s1"],
+          ["s1", "p3"],
+          ["p4", "p3"],
+          ["p3", "p2"],
+          ["p2", "s2"],
+          ["s2", "p1"],
+          ["p4", "p5"],
+          ["p4", "p6"],
+          ["p5", "p1"],
+          ["p6", "p8"],
+          ["p8", "s4"],
+          ["s4", "s5"],
+          ["s5", "p1"],
+        ];
+        return {
+          v: 1,
+          turn: 1,
+          current: 0,
+          ply: 0,
+          era: null,
+          players: [
+            {
+              name: "Zack",
+              faction: "Republic",
+              color: "#3aa0ff",
+              credits: 0,
+              movesBought: 0,
+              lastStandAt: null,
+            },
+            { name: "Sean", faction: "CIS", color: "#ff4a3a", credits: 0, movesBought: 0, lastStandAt: null },
+          ],
+          rules: Object.fromEntries(RULES.map((r) => [r[0], r[2]])),
+          nodes: [
+            P("p1", "Kashyyyk", "jungle", 0.8, 8.2, 3.4, ["Beachhead", "Docks", "Islands"]),
+            P("p2", "Coruscant", "city", 0.85, 7.6, -2.0, ["Jedi Temple"]),
+            P("p3", "Rhen Var", "ice", 0.7, 7.2, -6.0, ["Citadel", "Harbor"]),
+            P("p4", "Polis Massa", "rock", 0.5, 3.4, -2.7, ["Medical Facility"]),
+            P("p5", "Tantive IV", "station", 0.45, 3.2, 1.1, ["Interior"]),
+            P("p6", "Kamino", "ocean", 0.75, -1.6, 1.8, ["Cloning Facility"]),
+            P("p7", "Tatooine", "desert", 0.8, -1.4, -2.6, ["Jabba's Palace", "Mos Eisley", "Dune Sea"]),
+            P("p8", "Death Star", "deathstar", 0.75, -8.0, 5.6, ["Interior"]),
+            P("p9", "Mustafar", "lava", 0.65, -7.4, -0.3, ["Refinery"]),
+            P("p10", "Geonosis", "dust", 0.75, -6.9, -4.8, ["Dust Plains", "Spire"], { ring: true }),
+            S("s1", 2.9, -5.1),
+            S("s2", 7.6, 0.8),
+            S("s3", -7.8, 2.4),
+            S("s4", -2.2, 4.5),
+            S("s5", 2.4, 3.8),
+          ],
+          lanes: lanes.map((l, i) => ({ id: "l" + (i + 1), a: l[0], b: l[1], value: 1 })),
+          fleets: [],
+          log: ["Board ready. Pick capitals and deploy the first fleets."],
+        };
+      }
+
+      function normalize(s) {
+        const d = defaultState();
+        if (!s || !Array.isArray(s.nodes) || !Array.isArray(s.lanes))
+          throw new Error("not a Seanquest board file");
+        s.players = Array.isArray(s.players) && s.players.length === 2 ? s.players : d.players;
+        s.players.forEach((p, i) => {
+          p.name = String(p.name || d.players[i].name);
+          p.faction = String(p.faction || "");
+          if (!/^#[0-9a-f]{6}$/i.test(p.color)) p.color = d.players[i].color;
+          p.credits = +p.credits || 0;
+          p.movesBought = +p.movesBought || 0;
+          if (p.lastStandAt === undefined) p.lastStandAt = null;
+        });
+        s.rules = Object.assign(d.rules, s.rules || {});
+        s.nodes.forEach((n) => {
+          n.x = +n.x || 0;
+          n.z = +n.z || 0;
+          n.name = String(n.name || "");
+          if (n.kind !== "space") {
+            n.kind = "planet";
+            n.size = clamp(+n.size || 0.7, 0.3, 1.5);
+            n.maps = Array.isArray(n.maps) ? n.maps : [];
+            n.maps.forEach((m) => {
+              m.name = String(m.name || "");
+              m.owner = m.owner === 0 || m.owner === 1 ? m.owner : -1;
+            });
+          }
+        });
+        const ids = new Set(s.nodes.map((n) => n.id));
+        s.lanes = s.lanes.filter((l) => ids.has(l.a) && ids.has(l.b));
+        s.lanes.forEach((l) => {
+          l.value = +l.value || 1;
+        });
+        s.fleets = (s.fleets || []).filter((f) => ids.has(f.node) && (f.owner === 0 || f.owner === 1));
+        s.log = Array.isArray(s.log) ? s.log.map(String) : [];
+        s.turn = +s.turn || 1;
+        s.current = s.current === 1 ? 1 : 0;
+        s.ply = +s.ply || 0;
+        return s;
+      }
+
+      let state;
+      try {
+        state = normalize(JSON.parse(localStorage.getItem(KEY)));
+      } catch (e) {
+        state = defaultState();
+      }
+      let edit = true,
+        tool = "select",
+        sel = null,
+        laneStart = null;
+      const undoStack = [];
+
+      const nodeById = (id) => state.nodes.find((n) => n.id === id);
+      const nodeR = (n) => (n.kind === "planet" ? n.size : 0.3);
+      const fullOwner = (n) =>
+        n.kind === "planet" && n.maps.length && n.maps.every((m) => m.owner === n.maps[0].owner)
+          ? n.maps[0].owner
+          : -1;
+      const neighbours = (id) =>
+        state.lanes.filter((l) => l.a === id || l.b === id).map((l) => (l.a === id ? l.b : l.a));
+      const mapsOwned = (pi) =>
+        state.nodes.reduce(
+          (t, n) => t + (n.kind === "planet" ? n.maps.filter((m) => m.owner === pi).length : 0),
+          0,
+        );
+      const capitalsHeld = (pi) =>
+        state.nodes.filter((n) => n.kind === "planet" && n.capital && fullOwner(n) === pi).length;
+      const income = (pi) =>
+        mapsOwned(pi) * state.rules.incomePerMap + capitalsHeld(pi) * state.rules.capitalBonus;
+      const fleetsOf = (pi) => state.fleets.filter((f) => f.owner === pi);
+      const fleetCost = (pi) => {
+        const n = fleetsOf(pi).length + 1;
+        return n <= 1 ? 0 : state.rules.fleetBase * 2 ** (n - 2);
+      };
+      const moveCost = (pi) => state.rules.moveBase * 2 ** state.players[pi].movesBought;
+
+      function save() {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(state));
+        } catch (e) {
+          /* storage unavailable */
+        }
+      }
+      function pushUndo() {
+        undoStack.push(JSON.stringify(state));
+        if (undoStack.length > 80) undoStack.shift();
+      }
+      function commit() {
+        save();
+        syncScene();
+        renderUI();
+      }
+      function mutate(fn) {
+        pushUndo();
+        fn();
+        commit();
+      }
+      function log(msg) {
+        state.log.unshift("T" + state.turn + " · " + msg);
+        state.log.length = Math.min(state.log.length, 80);
+      }
+      function undo() {
+        if (!undoStack.length) return toast("Nothing to undo");
+        state = JSON.parse(undoStack.pop());
+        sel = null;
+        laneStart = null;
+        commit();
+      }
+      let toastT;
+      function toast(msg) {
+        const t = $("toast");
+        t.textContent = msg;
+        t.classList.add("show");
+        clearTimeout(toastT);
+        toastT = setTimeout(() => t.classList.remove("show"), 2200);
+      }
+
+      // ───────────────────────────── game actions ─────────────────────────────
+      function spend(pi, cost, what) {
+        const p = state.players[pi];
+        if (p.credits < cost) {
+          toast(p.name + " needs " + cost + " credits");
+          return false;
+        }
+        pushUndo();
+        p.credits -= cost;
+        log(p.name + " bought " + what + (cost ? " (−" + cost + ")" : " (free)"));
+        return true;
+      }
+      function buy(pi, what) {
+        const p = state.players[pi],
+          r = state.rules;
+        if (what === "fleet") {
+          let at = sel && sel.kind === "node" ? nodeById(sel.id) : null;
+          if (!at) at = state.nodes.find((n) => n.kind === "planet" && n.capital && fullOwner(n) === pi);
+          if (!at) return toast("Select the planet to deploy the fleet at");
+          if (!spend(pi, fleetCost(pi), "a fleet at " + at.name)) return;
+          const f = { id: uid("f"), owner: pi, node: at.id };
+          state.fleets.push(f);
+          sel = { kind: "fleet", id: f.id };
+        } else if (what === "hero") {
+          if (!spend(pi, r.hero, "a hero")) return;
+        } else if (what === "move") {
+          if (!spend(pi, moveCost(pi), "a move point")) return;
+          p.movesBought++;
+        } else if (what === "faction") {
+          if (!spend(pi, r.factionPick, "a faction pick")) return;
+        } else if (what === "stand") {
+          if (!spend(pi, r.lastStand, "a LAST STAND — it uses their next turn")) return;
+          p.lastStandAt = state.ply;
+        }
+        commit();
+      }
+      function battle(node, mapIdx, winner) {
+        mutate(() => {
+          const W = state.players[winner],
+            L = state.players[1 - winner],
+            r = state.rules;
+          W.credits += r.battleWin;
+          L.credits += r.battleLoss;
+          let where = node.name;
+          if (mapIdx >= 0) {
+            node.maps[mapIdx].owner = winner;
+            where += ": " + node.maps[mapIdx].name;
+          }
+          log(W.name + " won at " + where + " (+" + r.battleWin + "), " + L.name + " +" + r.battleLoss);
+        });
+      }
+      function endTurn() {
+        mutate(() => {
+          const pi = state.current,
+            p = state.players[pi],
+            inc = income(pi);
+          p.credits += inc;
+          p.movesBought = 0;
+          if (p.lastStandAt !== null && state.ply > p.lastStandAt) p.lastStandAt = null;
+          log(
+            p.name +
+              " ended their turn, income +" +
+              inc +
+              " (" +
+              mapsOwned(pi) +
+              " maps, " +
+              capitalsHeld(pi) +
+              " capital)",
+          );
+          state.ply++;
+          state.current = 1 - pi;
+          if (state.current === 0) state.turn++;
+        });
+      }
+      function rollEra() {
+        mutate(() => {
+          const die = 1 + Math.floor(Math.random() * 6);
+          state.era = { die, era: die % 2 ? "Clone Wars" : "Galactic Civil War" };
+          log("Era roll: " + die + " → " + state.era.era);
+        });
+      }
+      function moveFleet(f, to) {
+        mutate(() => {
+          const from = nodeById(f.node),
+            lane = state.lanes.find(
+              (l) => (l.a === f.node && l.b === to.id) || (l.b === f.node && l.a === to.id),
+            );
+          f.node = to.id;
+          log(
+            state.players[f.owner].name +
+              " fleet: " +
+              from.name +
+              " → " +
+              to.name +
+              (lane && lane.value !== 1 ? " (lane value " + lane.value + ")" : ""),
+          );
+        });
+      }
+      function deleteThing(t) {
+        mutate(() => {
+          if (t.kind === "node") {
+            state.nodes = state.nodes.filter((n) => n.id !== t.id);
+            state.lanes = state.lanes.filter((l) => l.a !== t.id && l.b !== t.id);
+            state.fleets = state.fleets.filter((f) => f.node !== t.id);
+          } else if (t.kind === "lane") state.lanes = state.lanes.filter((l) => l.id !== t.id);
+          else if (t.kind === "fleet") state.fleets = state.fleets.filter((f) => f.id !== t.id);
+          if (sel && sel.id === t.id) sel = null;
+        });
+      }
+
+      // ───────────────────────────── three.js scene ─────────────────────────────
+      const canvas = $("c");
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
+      const cam = { target: new THREE.Vector3(0, 0, 0), r: 25, theta: 0, phi: 0.82 };
+      scene.add(new THREE.AmbientLight(0x7f95bb, 0.75));
+      const sun = new THREE.DirectionalLight(0xffffff, 2.6);
+      sun.position.set(-9, 11, 7);
+      scene.add(sun);
+
+      function glowTexture() {
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 128;
+        const g = cv.getContext("2d"),
+          gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        gr.addColorStop(0, "rgba(255,255,255,1)");
+        gr.addColorStop(0.25, "rgba(255,255,255,.55)");
+        gr.addColorStop(0.6, "rgba(255,255,255,.12)");
+        gr.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 128, 128);
+        return new THREE.CanvasTexture(cv);
+      }
+      const GLOW = glowTexture();
+      const glowSprite = (color, scale, opacity) => {
+        const s = new THREE.Sprite(
+          new THREE.SpriteMaterial({
+            map: GLOW,
+            color,
+            transparent: true,
+            opacity,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        s.scale.setScalar(scale);
+        return s;
+      };
+
+      // backdrop: stars, nebulae, a galaxy disc under the board, and a holo grid
+      let galaxy;
+      (function backdrop() {
+        const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+        let pos = [],
+          col = [];
+        for (let i = 0; i < 3500; i++) {
+          const u = Math.random() * 2 - 1,
+            t = Math.random() * Math.PI * 2,
+            r = 190 + Math.random() * 60,
+            s = Math.sqrt(1 - u * u);
+          pos.push(r * s * Math.cos(t), r * u, r * s * Math.sin(t));
+          const b = 0.45 + Math.random() * 0.55,
+            w = Math.random();
+          col.push(b * (w > 0.7 ? 1 : 0.8), b * 0.9, b * (w < 0.3 ? 1 : 0.8));
+        }
+        let g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+        scene.add(
+          new THREE.Points(
+            g,
+            new THREE.PointsMaterial({
+              size: 2.2,
+              map: GLOW,
+              vertexColors: true,
+              transparent: true,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+            }),
+          ),
+        );
+
+        [
+          [0x3a2a9a, -120, 30, -150, 190],
+          [0x0f5a8a, 150, -20, -120, 170],
+          [0x7a2a6a, 60, 70, 170, 180],
+          [0x146a6a, -160, -50, 90, 160],
+        ].forEach((n) => {
+          const s = glowSprite(n[0], n[4], 0.32);
+          s.position.set(n[1], n[2], n[3]);
+          scene.add(s);
+        });
+
+        pos = [];
+        col = [];
+        for (let i = 0; i < 9000; i++) {
+          const r = Math.pow(Math.random(), 0.65) * 34,
+            a = ((i % 3) * Math.PI * 2) / 3 + r * 0.3 + gauss() * (0.25 + 3 / (r + 2));
+          pos.push(Math.cos(a) * r, gauss() * (1.2 - r / 40), Math.sin(a) * r);
+          const k = clamp(1 - r / 30, 0, 1),
+            b = 0.25 + Math.random() * 0.5;
+          col.push(b * (0.35 + 0.65 * k), b * (0.55 + 0.4 * k), b);
+        }
+        g = new THREE.BufferGeometry();
+        g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+        galaxy = new THREE.Points(
+          g,
+          new THREE.PointsMaterial({
+            size: 0.5,
+            map: GLOW,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.55,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+          }),
+        );
+        galaxy.position.y = -7;
+        scene.add(galaxy);
+        const core = glowSprite(0x9fc8ff, 26, 0.35);
+        core.position.y = -7;
+        scene.add(core);
+
+        const gm = new THREE.LineBasicMaterial({
+          color: 0x2a8fd0,
+          transparent: true,
+          opacity: 0.22,
+          depthWrite: false,
+        });
+        for (let r = 4; r <= 20; r += 4) {
+          const pts = [];
+          for (let i = 0; i <= 96; i++)
+            pts.push(
+              new THREE.Vector3(Math.cos((i / 96) * 6.2832) * r, -0.9, Math.sin((i / 96) * 6.2832) * r),
+            );
+          scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
+        }
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * 6.2832;
+          scene.add(
+            new THREE.Line(
+              new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(Math.cos(a) * 4, -0.9, Math.sin(a) * 4),
+                new THREE.Vector3(Math.cos(a) * 20, -0.9, Math.sin(a) * 20),
+              ]),
+              gm,
+            ),
+          );
+        }
+      })();
+
+      // procedural planet skins
+      const TYPES = {
+        jungle: {
+          ramp: [
+            [0, 8, 40, 62],
+            [0.44, 14, 70, 64],
+            [0.5, 30, 92, 40],
+            [0.75, 62, 124, 50],
+            [1, 150, 172, 110],
+          ],
+          atm: 0x6fd08a,
+        },
+        city: {
+          ramp: [
+            [0, 38, 40, 50],
+            [0.5, 82, 84, 96],
+            [1, 150, 150, 164],
+          ],
+          atm: 0xffd9a0,
+          fx: "city",
+          emis: [0xffc870, 0.55],
+        },
+        ice: {
+          ramp: [
+            [0, 118, 160, 202],
+            [0.5, 200, 226, 246],
+            [1, 255, 255, 255],
+          ],
+          atm: 0xbfe6ff,
+        },
+        rock: {
+          ramp: [
+            [0, 52, 47, 44],
+            [0.5, 108, 100, 93],
+            [1, 168, 160, 150],
+          ],
+          atm: 0x8a8a8a,
+          fx: "craters",
+        },
+        station: {
+          ramp: [
+            [0, 158, 162, 168],
+            [1, 228, 230, 234],
+          ],
+          atm: 0xffffff,
+          fx: "panels",
+        },
+        ocean: {
+          ramp: [
+            [0, 6, 24, 72],
+            [0.6, 20, 72, 142],
+            [1, 62, 132, 192],
+          ],
+          atm: 0x7fc4ff,
+          fx: "clouds",
+        },
+        desert: {
+          ramp: [
+            [0, 150, 96, 50],
+            [0.5, 206, 160, 96],
+            [1, 240, 216, 160],
+          ],
+          atm: 0xffd9a0,
+        },
+        deathstar: {
+          ramp: [
+            [0, 98, 101, 108],
+            [1, 150, 153, 160],
+          ],
+          atm: 0x99aabb,
+          fx: "deathstar",
+        },
+        lava: {
+          ramp: [
+            [0, 255, 224, 96],
+            [0.1, 255, 92, 12],
+            [0.24, 62, 14, 8],
+            [1, 22, 15, 15],
+          ],
+          atm: 0xff6a2a,
+          ridge: true,
+          emis: [0xff6a20, 1.4],
+        },
+        dust: {
+          ramp: [
+            [0, 96, 46, 30],
+            [0.5, 172, 86, 50],
+            [1, 216, 142, 92],
+          ],
+          atm: 0xff9a6a,
+          bands: true,
+        },
+        gas: {
+          ramp: [
+            [0, 120, 80, 52],
+            [0.3, 200, 160, 112],
+            [0.6, 232, 202, 162],
+            [1, 150, 100, 70],
+          ],
+          atm: 0xffd0a0,
+          bands: true,
+        },
+      };
+      function h3(x, y, z, s) {
+        let h = (x * 374761393 + y * 668265263 + z * 1274126177 + s * 1442695041) | 0;
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+      }
+      function vnoise(x, y, z, s) {
+        const xi = Math.floor(x),
+          yi = Math.floor(y),
+          zi = Math.floor(z);
+        let fx = x - xi,
+          fy = y - yi,
+          fz = z - zi;
+        fx = fx * fx * (3 - 2 * fx);
+        fy = fy * fy * (3 - 2 * fy);
+        fz = fz * fz * (3 - 2 * fz);
+        const L = (a, b, t) => a + (b - a) * t;
+        return L(
+          L(
+            L(h3(xi, yi, zi, s), h3(xi + 1, yi, zi, s), fx),
+            L(h3(xi, yi + 1, zi, s), h3(xi + 1, yi + 1, zi, s), fx),
+            fy,
+          ),
+          L(
+            L(h3(xi, yi, zi + 1, s), h3(xi + 1, yi, zi + 1, s), fx),
+            L(h3(xi, yi + 1, zi + 1, s), h3(xi + 1, yi + 1, zi + 1, s), fx),
+            fy,
+          ),
+          fz,
+        );
+      }
+      function fbm(x, y, z, s, oct) {
+        let v = 0,
+          a = 0.5,
+          t = 0;
+        for (let i = 0; i < oct; i++) {
+          v += a * vnoise(x, y, z, s + i * 17);
+          t += a;
+          a *= 0.5;
+          x *= 2;
+          y *= 2;
+          z *= 2;
+        }
+        return v / t;
+      }
+      function rampAt(ramp, t) {
+        for (let i = 1; i < ramp.length; i++)
+          if (t <= ramp[i][0]) {
+            const a = ramp[i - 1],
+              b = ramp[i],
+              k = (t - a[0]) / (b[0] - a[0] || 1);
+            return [a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, a[3] + (b[3] - a[3]) * k];
+          }
+        const e = ramp[ramp.length - 1];
+        return [e[1], e[2], e[3]];
+      }
+      const texCache = {};
+      function planetTexture(type, seed) {
+        const key = type + ":" + seed;
+        if (texCache[key]) return texCache[key];
+        const T = TYPES[type] || TYPES.rock,
+          W = 384,
+          H = 192,
+          cv = document.createElement("canvas");
+        cv.width = W;
+        cv.height = H;
+        const g = cv.getContext("2d"),
+          img = g.createImageData(W, H),
+          d = img.data;
+        for (let y = 0; y < H; y++) {
+          const phi = ((y + 0.5) / H) * Math.PI,
+            sy = Math.cos(phi),
+            sr = Math.sin(phi);
+          for (let x = 0; x < W; x++) {
+            const th = (x / W) * Math.PI * 2,
+              px = sr * Math.cos(th),
+              pz = sr * Math.sin(th);
+            let n;
+            if (T.bands) {
+              n = fbm(px * 0.8, sy * 5, pz * 0.8, seed, 4);
+              n = n * 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(sy * 13 + n * 5));
+            } else n = fbm(px * 2.3 + 7, sy * 2.3, pz * 2.3, seed, 5);
+            n = T.ridge ? clamp(Math.abs(n - 0.5) * 3.2, 0, 1) : clamp((n - 0.5) * 1.9 + 0.5, 0, 1);
+            let c = rampAt(T.ramp, n);
+            if (T.fx === "clouds") {
+              const a = clamp((fbm(px * 3 + 3, sy * 7, pz * 3, seed + 99, 4) - 0.5) * 5, 0, 1) * 0.9;
+              c = [c[0] + (255 - c[0]) * a, c[1] + (255 - c[1]) * a, c[2] + (255 - c[2]) * a];
+            }
+            const i = (y * W + x) * 4;
+            d[i] = c[0];
+            d[i + 1] = c[1];
+            d[i + 2] = c[2];
+            d[i + 3] = 255;
+          }
+        }
+        g.putImageData(img, 0, 0);
+        let k = seed;
+        const rnd = () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296;
+        if (T.fx === "city") {
+          for (let i = 0; i < 2600; i++) {
+            g.fillStyle = "rgba(255," + ((200 + rnd() * 55) | 0) + ",140," + (0.3 + rnd() * 0.7) + ")";
+            g.fillRect(rnd() * W, rnd() * H, 1 + (rnd() > 0.85), 1);
+          }
+          g.strokeStyle = "rgba(255,220,150,.25)";
+          for (let i = 0; i < 26; i++) {
+            g.beginPath();
+            const x = rnd() * W,
+              y = rnd() * H;
+            g.moveTo(x, y);
+            g.lineTo(x + rnd() * 70 - 35, y + rnd() * 30 - 15);
+            g.stroke();
+          }
+        } else if (T.fx === "craters") {
+          for (let i = 0; i < 60; i++) {
+            const x = rnd() * W,
+              y = 15 + rnd() * (H - 30),
+              r = 2 + rnd() * 9;
+            g.fillStyle = "rgba(0,0,0,.28)";
+            g.beginPath();
+            g.arc(x, y, r, 0, 7);
+            g.fill();
+            g.strokeStyle = "rgba(255,255,255,.2)";
+            g.beginPath();
+            g.arc(x - 0.6, y - 0.6, r, 0, 7);
+            g.stroke();
+          }
+        } else if (T.fx === "panels") {
+          for (let i = 0; i < 140; i++) {
+            g.fillStyle = "rgba(0,0,0," + rnd() * 0.16 + ")";
+            g.fillRect(rnd() * W, rnd() * H, 6 + rnd() * 30, 4 + rnd() * 14);
+          }
+          g.fillStyle = "rgba(165,34,30,.9)";
+          g.fillRect(0, H * 0.46, W, H * 0.07);
+          g.fillStyle = "rgba(0,0,0,.3)";
+          for (let x = 0; x < W; x += 24) g.fillRect(x, 0, 1, H);
+        } else if (T.fx === "deathstar") {
+          g.fillStyle = "rgba(0,0,0,.14)";
+          for (let y = 6; y < H; y += 9) g.fillRect(0, y, W, 1);
+          for (let i = 0; i < 260; i++) {
+            g.fillStyle = "rgba(0,0,0," + rnd() * 0.14 + ")";
+            g.fillRect(rnd() * W, rnd() * H, 4 + rnd() * 22, 3 + rnd() * 6);
+          }
+          g.fillStyle = "#23262b";
+          g.fillRect(0, H / 2 - 2, W, 4);
+          const dx = W * 0.3,
+            dy = H * 0.3,
+            gr = g.createRadialGradient(dx, dy, 2, dx, dy, 25);
+          gr.addColorStop(0, "#3a3d44");
+          gr.addColorStop(0.8, "#6a6d74");
+          gr.addColorStop(1, "#c2c5cc");
+          g.fillStyle = gr;
+          g.beginPath();
+          g.ellipse(dx, dy, 29, 24, 0, 0, 7);
+          g.fill();
+          g.fillStyle = "#b6ffb0";
+          g.beginPath();
+          g.arc(dx, dy, 1.6, 0, 7);
+          g.fill();
+          for (let i = 0; i < 300; i++) {
+            g.fillStyle = "rgba(255,255,220," + rnd() * 0.7 + ")";
+            g.fillRect(rnd() * W, rnd() * H, 1, 1);
+          }
+        }
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.anisotropy = 4;
+        return (texCache[key] = tex);
+      }
+      const seedOf = (id) => {
+        let h = 7;
+        for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+        return h % 9973;
+      };
+
+      // dynamic board objects, rebuilt from state by syncScene()
+      const board = new THREE.Group();
+      scene.add(board);
+      const fleetLayer = new THREE.Group();
+      scene.add(fleetLayer);
+      let pickables = [],
+        spinners = [],
+        reticles = [],
+        pulses = [],
+        lanePulses = [],
+        labels = [];
+      const fleetObjs = new Map(),
+        fleetPos = new Map();
+      const labelRoot = $("labels");
+      const Y = new THREE.Vector3(0, 1, 0);
+
+      function disposeGroup(g) {
+        g.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          if (o.material && o.material.map !== GLOW) o.material.dispose();
+          else if (o.material) o.material.dispose();
+        });
+        g.clear();
+      }
+      const flat = (geo, mat) => {
+        const m = new THREE.Mesh(geo, mat);
+        m.rotation.x = -Math.PI / 2;
+        return m;
+      };
+      const basic = (color, opacity, add) =>
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: add ? THREE.AdditiveBlending : THREE.NormalBlending,
+        });
+      function addLabel(cls, html, x, z, r, color) {
+        const el = document.createElement("div");
+        el.className = "lbl " + cls;
+        el.innerHTML = html;
+        if (color) el.style.color = color;
+        labelRoot.appendChild(el);
+        labels.push({ el, x, z, r });
+      }
+      function reticle(r) {
+        const g = new THREE.Group();
+        for (let i = 0; i < 4; i++)
+          g.add(
+            flat(
+              new THREE.RingGeometry(r, r + 0.08, 20, 1, (i * Math.PI) / 2 + 0.25, Math.PI / 2 - 0.5),
+              basic(0xffb648, 0.95, true),
+            ),
+          );
+        reticles.push(g);
+        return g;
+      }
+
+      function syncScene() {
+        disposeGroup(board);
+        disposeGroup(fleetLayer);
+        pickables = [];
+        spinners = [];
+        reticles = [];
+        pulses = [];
+        lanePulses = [];
+        labels = [];
+        fleetObjs.clear();
+        labelRoot.innerHTML = "";
+        const selFleet = sel && sel.kind === "fleet" ? state.fleets.find((f) => f.id === sel.id) : null;
+        const reach = selFleet ? neighbours(selFleet.node) : [];
+
+        for (const l of state.lanes) {
+          const a = nodeById(l.a),
+            b = nodeById(l.b);
+          if (!a || !b) continue;
+          const va = new THREE.Vector3(a.x, 0, a.z),
+            vb = new THREE.Vector3(b.x, 0, b.z),
+            dir = vb.clone().sub(va),
+            len = dir.length();
+          if (len < 0.01) continue;
+          dir.normalize();
+          const p0 = va.clone().addScaledVector(dir, nodeR(a) + 0.12),
+            p1 = vb.clone().addScaledVector(dir, -(nodeR(b) + 0.12));
+          const L = Math.max(0.05, p0.distanceTo(p1)),
+            mid = p0.clone().add(p1).multiplyScalar(0.5),
+            on = sel && sel.kind === "lane" && sel.id === l.id;
+          const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
+          const beam = new THREE.Mesh(
+            new THREE.CylinderGeometry(on ? 0.07 : 0.035, on ? 0.07 : 0.035, L, 6),
+            basic(on ? 0xffb648 : 0x39c5ff, on ? 0.95 : 0.6, true),
+          );
+          beam.position.copy(mid);
+          beam.quaternion.copy(q);
+          board.add(beam);
+          const hitbox = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.2, L, 6),
+            basic(0xffffff, 0, false),
+          );
+          hitbox.position.copy(mid);
+          hitbox.quaternion.copy(q);
+          hitbox.userData = { kind: "lane", id: l.id };
+          board.add(hitbox);
+          pickables.push(hitbox);
+          const sp = glowSprite(0x9fe4ff, 0.35, 0.9);
+          board.add(sp);
+          lanePulses.push({ sp, p0, p1, off: (seedOf(l.id) % 100) / 100 });
+          if (l.value !== 1 || on) addLabel("lane", esc(l.value), mid.x, mid.z, 0);
+        }
+
+        for (const n of state.nodes) {
+          const g = new THREE.Group();
+          g.position.set(n.x, 0, n.z);
+          board.add(g);
+          const on = sel && sel.kind === "node" && sel.id === n.id,
+            R = nodeR(n);
+          if (n.kind === "planet") {
+            const T = TYPES[n.type] || TYPES.rock,
+              tex = planetTexture(n.type, seedOf(n.id));
+            const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0 });
+            if (T.emis) {
+              mat.emissiveMap = tex;
+              mat.emissive = new THREE.Color(T.emis[0]);
+              mat.emissiveIntensity = T.emis[1];
+            }
+            const m = new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32), mat);
+            m.rotation.z = 0.3;
+            m.userData = { kind: "node", id: n.id };
+            g.add(m);
+            pickables.push(m);
+            spinners.push(m);
+            g.add(glowSprite(T.atm, R * 3.3, 0.5));
+            if (n.ring) {
+              const rg = flat(new THREE.RingGeometry(R * 1.35, R * 2.05, 64), basic(T.atm, 0.38, false));
+              rg.rotation.x = -Math.PI / 2 + 0.45;
+              rg.rotation.y = 0.2;
+              g.add(rg);
+            }
+            const k = n.maps.length || 1,
+              gap = k > 1 ? 0.16 : 0,
+              base = n.ring ? R * 2.2 : R + 0.28;
+            for (let i = 0; i < k; i++) {
+              const o = n.maps[i] ? n.maps[i].owner : -1;
+              g.add(
+                flat(
+                  new THREE.RingGeometry(
+                    base,
+                    base + 0.1,
+                    48,
+                    1,
+                    (i * 6.2832) / k + gap / 2,
+                    6.2832 / k - gap,
+                  ),
+                  basic(o >= 0 ? state.players[o].color : 0x5a6b7a, o >= 0 ? 1 : 0.5, o >= 0),
+                ),
+              );
+            }
+            if (n.capital)
+              g.add(flat(new THREE.RingGeometry(base + 0.2, base + 0.25, 64), basic(0xffd76a, 0.9, true)));
+            if (on) g.add(reticle(base + 0.42));
+            const fo = fullOwner(n),
+              pips = n.maps
+                .map(
+                  (m) =>
+                    '<i style="' +
+                    (m.owner >= 0 ? "background:" + state.players[m.owner].color : "") +
+                    '"></i>',
+                )
+                .join("");
+            addLabel(
+              "",
+              '<div class="nm">' +
+                (n.capital ? "★ " : "") +
+                esc(n.name) +
+                '</div><div class="pips">' +
+                pips +
+                "</div>",
+              n.x,
+              n.z,
+              base + 0.3,
+              fo >= 0 ? state.players[fo].color : "",
+            );
+          } else {
+            const t = new THREE.Mesh(
+              new THREE.TorusGeometry(0.28, 0.035, 8, 40),
+              basic(on ? 0xffb648 : 0x7fd8ff, 0.95, true),
+            );
+            t.rotation.x = Math.PI / 2;
+            g.add(t);
+            g.add(new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), basic(0xcff3ff, 1, true)));
+            g.add(glowSprite(0x39c5ff, 1.1, 0.35));
+            const hb = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 8), basic(0xffffff, 0, false));
+            hb.userData = { kind: "node", id: n.id };
+            g.add(hb);
+            pickables.push(hb);
+            if (on) g.add(reticle(0.5));
+            if (n.name && n.name !== "Open space") addLabel("sp", esc(n.name), n.x, n.z, 0.45);
+          }
+          if (reach.includes(n.id) || laneStart === n.id) {
+            const pr = flat(
+              new THREE.RingGeometry(R + 0.55, R + 0.68, 48),
+              basic(laneStart === n.id ? 0xffb648 : 0x9dffb0, 0.9, true),
+            );
+            g.add(pr);
+            pulses.push(pr);
+          }
+        }
+
+        const perNode = {};
+        for (const f of state.fleets) {
+          const g = new THREE.Group(),
+            col = new THREE.Color(state.players[f.owner].color),
+            on = selFleet === f;
+          const geo = new THREE.ConeGeometry(0.19, 0.7, 4);
+          geo.rotateX(Math.PI / 2);
+          geo.scale(1.35, 0.42, 1);
+          g.add(
+            new THREE.Mesh(
+              geo,
+              new THREE.MeshStandardMaterial({
+                color: 0xdfe6ee,
+                emissive: col,
+                emissiveIntensity: 0.85,
+                roughness: 0.5,
+                flatShading: true,
+              }),
+            ),
+          );
+          g.add(glowSprite(on ? 0xffffff : col, on ? 1.5 : 0.9, on ? 0.9 : 0.6));
+          const hb = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), basic(0xffffff, 0, false));
+          hb.userData = { kind: "fleet", id: f.id };
+          g.add(hb);
+          pickables.push(hb);
+          if (on) g.scale.setScalar(1.35);
+          const list = (perNode[f.node] = perNode[f.node] || []);
+          list.push(f.id);
+          fleetLayer.add(g);
+          fleetObjs.set(f.id, { g, f, idx: list.length - 1, list });
+          if (fleetPos.has(f.id)) g.position.copy(fleetPos.get(f.id));
+        }
+        for (const id of [...fleetPos.keys()]) if (!fleetObjs.has(id)) fleetPos.delete(id);
+      }
+
+      const tmpV = new THREE.Vector3(),
+        tmpD = new THREE.Vector3();
+      function updateFleets(t, dt) {
+        for (const [id, o] of fleetObjs) {
+          const n = nodeById(o.f.node);
+          if (!n) continue;
+          const a = t * 0.35 + (o.idx * 6.2832) / o.list.length,
+            r = nodeR(n) + (n.kind === "planet" && n.ring ? 1.3 : 0.55);
+          tmpV.set(n.x + Math.cos(a) * r, 0.22, n.z + Math.sin(a) * r);
+          let cur = fleetPos.get(id);
+          if (!cur) {
+            cur = tmpV.clone();
+            fleetPos.set(id, cur);
+          }
+          tmpD.copy(tmpV).sub(cur);
+          if (tmpD.length() > 0.6) tmpD.normalize();
+          else tmpD.set(-Math.sin(a), 0, Math.cos(a));
+          cur.lerp(tmpV, 1 - Math.exp(-dt * 3.5));
+          o.g.position.copy(cur);
+          o.g.lookAt(tmpV.copy(cur).add(tmpD));
+        }
+      }
+      function updateLabels() {
+        const w = innerWidth,
+          h = innerHeight,
+          f = h / (2 * Math.tan((camera.fov * Math.PI) / 360));
+        for (const L of labels) {
+          tmpV.set(L.x, 0, L.z);
+          const dist = camera.position.distanceTo(tmpV);
+          tmpV.project(camera);
+          if (tmpV.z > 1) {
+            L.el.style.display = "none";
+            continue;
+          }
+          const sx = (tmpV.x * 0.5 + 0.5) * w,
+            sy = (-tmpV.y * 0.5 + 0.5) * h + (L.r ? ((L.r * f) / dist) * 0.62 + 3 : 0);
+          L.el.style.display = "";
+          L.el.style.transform =
+            "translate(" +
+            sx.toFixed(1) +
+            "px," +
+            sy.toFixed(1) +
+            "px) translate(-50%," +
+            (L.r ? "0" : "-50%") +
+            ")";
+        }
+      }
+      function resize() {
+        renderer.setSize(innerWidth, innerHeight, false);
+        camera.aspect = innerWidth / innerHeight;
+        camera.updateProjectionMatrix();
+      }
+      addEventListener("resize", resize);
+
+      let last = performance.now();
+      function frame(now) {
+        const t = now / 1000,
+          dt = Math.min(0.1, (now - last) / 1000);
+        last = now;
+        const sp = Math.sin(cam.phi);
+        camera.position.set(
+          cam.target.x + cam.r * sp * Math.sin(cam.theta),
+          cam.target.y + cam.r * Math.cos(cam.phi),
+          cam.target.z + cam.r * sp * Math.cos(cam.theta),
+        );
+        camera.lookAt(cam.target);
+        for (const m of spinners) m.rotation.y += dt * 0.12;
+        for (const r of reticles) r.rotation.y = t * 0.9;
+        for (const p of pulses) {
+          const s = 1 + 0.08 * Math.sin(t * 5);
+          p.scale.set(s, s, 1);
+          p.material.opacity = 0.55 + 0.4 * Math.sin(t * 5);
+        }
+        for (const lp of lanePulses) lp.sp.position.lerpVectors(lp.p0, lp.p1, (t * 0.12 + lp.off) % 1);
+        galaxy.rotation.y = t * 0.006;
+        updateFleets(t, dt);
+        renderer.render(scene, camera);
+        updateLabels();
+        requestAnimationFrame(frame);
+      }
+
+      // ───────────────────────────── pointer input ─────────────────────────────
+      const ray = new THREE.Raycaster(),
+        ndc = new THREE.Vector2(),
+        ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+      function aim(e) {
+        ndc.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+        ray.setFromCamera(ndc, camera);
+      }
+      function pick(e) {
+        aim(e);
+        const hits = ray.intersectObjects(pickables, false);
+        const h = hits.find((x) => x.object.userData.kind !== "lane") || hits[0];
+        return h ? h.object.userData : null;
+      }
+      function groundPoint(e) {
+        aim(e);
+        const p = new THREE.Vector3();
+        return ray.ray.intersectPlane(ground, p) ? p : null;
+      }
+      const r1 = (v) => Math.round(v * 10) / 10;
+
+      let drag = null;
+      canvas.addEventListener("pointerdown", (e) => {
+        canvas.setPointerCapture(e.pointerId);
+        const hit = pick(e);
+        drag = {
+          x: e.clientX,
+          y: e.clientY,
+          sx: e.clientX,
+          sy: e.clientY,
+          moved: false,
+          hit,
+          mode: e.button === 2 || e.shiftKey ? "pan" : "orbit",
+        };
+        if (e.button === 0 && edit && tool === "move" && hit && hit.kind === "node") {
+          drag.mode = "node";
+          sel = hit;
+        }
+      });
+      canvas.addEventListener("pointermove", (e) => {
+        if (!drag) {
+          canvas.style.cursor = pick(e)
+            ? "pointer"
+            : edit && (tool === "planet" || tool === "space")
+              ? "crosshair"
+              : "grab";
+          return;
+        }
+        const dx = e.clientX - drag.x,
+          dy = e.clientY - drag.y;
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        if (!drag.moved && Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 4) return;
+        if (!drag.moved && drag.mode === "node") pushUndo();
+        drag.moved = true;
+        if (drag.mode === "orbit") {
+          cam.theta -= dx * 0.005;
+          cam.phi = clamp(cam.phi - dy * 0.005, 0.12, 1.5);
+        } else if (drag.mode === "pan") {
+          const s = cam.r * 0.0016,
+            c = Math.cos(cam.theta),
+            sn = Math.sin(cam.theta);
+          cam.target.x += (-c * dx - sn * dy) * s;
+          cam.target.z += (sn * dx - c * dy) * s;
+        } else {
+          const p = groundPoint(e),
+            n = nodeById(drag.hit.id);
+          if (p && n) {
+            n.x = r1(p.x);
+            n.z = r1(p.z);
+            syncScene();
+          }
+        }
+      });
+      canvas.addEventListener("pointerup", (e) => {
+        const d = drag;
+        drag = null;
+        if (!d) return;
+        if (d.moved) {
+          if (d.mode === "node") commit();
+          return;
+        }
+        if (e.button === 0) click(d.hit, e);
+      });
+      canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+      canvas.addEventListener(
+        "wheel",
+        (e) => {
+          e.preventDefault();
+          cam.r = clamp(cam.r * Math.exp(e.deltaY * 0.001), 5, 75);
+        },
+        { passive: false },
+      );
+
+      function click(hit, e) {
+        if (edit && (tool === "planet" || tool === "space")) {
+          const p = groundPoint(e);
+          if (!p) return;
+          mutate(() => {
+            const n =
+              tool === "planet"
+                ? {
+                    id: uid("p"),
+                    kind: "planet",
+                    name: "New planet",
+                    type: "rock",
+                    size: 0.7,
+                    x: r1(p.x),
+                    z: r1(p.z),
+                    ring: false,
+                    capital: false,
+                    maps: [{ name: "Map 1", owner: -1 }],
+                  }
+                : { id: uid("s"), kind: "space", name: "Open space", x: r1(p.x), z: r1(p.z) };
+            state.nodes.push(n);
+            sel = { kind: "node", id: n.id };
+            tool = "select";
+          });
+          return;
+        }
+        if (edit && tool === "lane") {
+          if (!hit || hit.kind !== "node") {
+            laneStart = null;
+            return commit();
+          }
+          if (!laneStart) {
+            laneStart = hit.id;
+            return commit();
+          }
+          const a = laneStart,
+            b = hit.id;
+          laneStart = null;
+          if (a === b) return commit();
+          if (state.lanes.some((l) => (l.a === a && l.b === b) || (l.a === b && l.b === a))) {
+            toast("Those two are already linked");
+            return commit();
+          }
+          return mutate(() => {
+            const l = { id: uid("l"), a, b, value: 1 };
+            state.lanes.push(l);
+            sel = { kind: "lane", id: l.id };
+          });
+        }
+        if (edit && tool === "delete") {
+          if (hit) deleteThing(hit);
+          return;
+        }
+        const f = sel && sel.kind === "fleet" ? state.fleets.find((x) => x.id === sel.id) : null;
+        if (f && hit && hit.kind === "node" && hit.id !== f.node) {
+          if (neighbours(f.node).includes(hit.id)) return moveFleet(f, nodeById(hit.id));
+          toast("No lane from here to there");
+        }
+        sel = hit ? { kind: hit.kind, id: hit.id } : null;
+        commit();
+      }
+
+      // ───────────────────────────── menus ─────────────────────────────
+      const HINTS = {
+        select: "Click a planet, lane or fleet to edit it. Drag to orbit, right-drag to pan, wheel to zoom.",
+        move: "Drag a planet or space point to reposition it on the board.",
+        delete: "Click a planet, space point, lane or fleet to remove it.",
+        planet: "Click empty space to place a new planet.",
+        space: "Click empty space to place an open-space point.",
+        lane: "Click one node, then another, to link them with a lane.",
+      };
+      const chips = (act, cur) =>
+        '<button class="chip' +
+        (cur < 0 ? " on" : "") +
+        '" data-act="' +
+        act +
+        ':-1" title="Neutral">–</button>' +
+        state.players
+          .map(
+            (p, i) =>
+              '<button class="chip' +
+              (cur === i ? " on" : "") +
+              '" style="--pc:' +
+              p.color +
+              '" data-act="' +
+              act +
+              ":" +
+              i +
+              '" title="' +
+              esc(p.name) +
+              ' holds this map">' +
+              esc(p.name[0] || i + 1) +
+              "</button>",
+          )
+          .join("");
+      const winBtns = (act) =>
+        state.players
+          .map(
+            (p, i) =>
+              '<button class="chip b" style="--pc:' +
+              p.color +
+              '" data-act="' +
+              act +
+              ":" +
+              i +
+              '" title="' +
+              esc(p.name) +
+              " won the battle here: +" +
+              state.rules.battleWin +
+              ", loser +" +
+              state.rules.battleLoss +
+              '">' +
+              esc(p.name[0] || i + 1) +
+              " won</button>",
+          )
+          .join("");
+      const fleetRows = (list, short) =>
+        list
+          .map(
+            (f) =>
+              '<div class="fl"><button class="btn' +
+              (sel && sel.id === f.id ? " on" : "") +
+              '" data-act="selfleet:' +
+              f.id +
+              '" style="border-left:4px solid ' +
+              state.players[f.owner].color +
+              '">' +
+              (short ? "Fleet" : esc(state.players[f.owner].name) + " fleet") +
+              " @ " +
+              esc((nodeById(f.node) || {}).name || "?") +
+              '</button><button class="btn warn" data-act="delfleet:' +
+              f.id +
+              '" title="Remove (destroyed)">✕</button></div>',
+          )
+          .join("");
+
+      function renderSelection() {
+        const dis = edit ? "" : " disabled";
+        let h = "";
+        if (!sel)
+          h =
+            '<div class="hint">Nothing selected. Click a planet to set who holds its maps, or a fleet to move it.</div>';
+        else if (sel.kind === "node") {
+          const n = nodeById(sel.id);
+          if (!n) {
+            sel = null;
+            return renderSelection();
+          }
+          h +=
+            '<div class="row"><label>Name</label><input data-f="name" value="' +
+            esc(n.name) +
+            '"' +
+            dis +
+            "></div>";
+          if (n.kind === "planet") {
+            h +=
+              '<div class="edit-only"><div class="row"><label>Surface</label><select data-f="type">' +
+              Object.keys(TYPES)
+                .map((t) => "<option" + (t === n.type ? " selected" : "") + ">" + t + "</option>")
+                .join("") +
+              "</select></div>" +
+              '<div class="row"><label>Size</label><input type="range" data-f="size" min=".3" max="1.5" step=".05" value="' +
+              n.size +
+              '"></div>' +
+              '<div class="row"><label>Rings</label><input type="checkbox" data-f="ring"' +
+              (n.ring ? " checked" : "") +
+              "></div></div>" +
+              '<div class="row"><label>Capital</label><input type="checkbox" data-f="capital"' +
+              (n.capital ? " checked" : "") +
+              '><span style="color:var(--dim);font-size:11px">+' +
+              state.rules.capitalBonus +
+              "/turn to whoever holds every map</span></div>" +
+              '<h2 style="margin-top:10px">Maps · holder · battle result</h2>';
+            n.maps.forEach((m, i) => {
+              h +=
+                '<div class="map">' +
+                (edit
+                  ? '<input class="mn" data-f="map" data-i="' + i + '" value="' + esc(m.name) + '">'
+                  : '<span class="mn">' + esc(m.name) + "</span>") +
+                chips("own:" + i, m.owner) +
+                winBtns("battle:" + i) +
+                '<button class="chip edit-only" data-act="delmap:' +
+                i +
+                '" title="Remove map">✕</button></div>';
+            });
+            h += '<button class="btn edit-only" data-act="addmap">+ Map</button>';
+          } else h += '<div class="row"><label>Space battle</label>' + winBtns("battle:-1") + "</div>";
+          const here = state.fleets.filter((f) => f.node === n.id);
+          if (here.length) h += '<h2 style="margin-top:10px">Fleets here</h2>' + fleetRows(here);
+          h +=
+            '<div class="row edit-only" style="margin-top:10px"><button class="btn warn" data-act="delsel">Delete ' +
+            n.kind +
+            "</button></div>";
+        } else if (sel.kind === "lane") {
+          const l = state.lanes.find((x) => x.id === sel.id);
+          if (!l) {
+            sel = null;
+            return renderSelection();
+          }
+          h =
+            '<div style="text-transform:uppercase">' +
+            esc(nodeById(l.a).name) +
+            " ↔ " +
+            esc(nodeById(l.b).name) +
+            "</div>" +
+            '<div class="row"><label>Lane value</label><input type="number" data-f="value" min="0" step="1" value="' +
+            l.value +
+            '"' +
+            dis +
+            "></div>" +
+            '<div class="row edit-only"><button class="btn warn" data-act="delsel">Delete lane</button></div>';
+        } else {
+          const f = state.fleets.find((x) => x.id === sel.id);
+          if (!f) {
+            sel = null;
+            return renderSelection();
+          }
+          const p = state.players[f.owner];
+          h =
+            '<div style="text-transform:uppercase;color:' +
+            p.color +
+            '">' +
+            esc(p.name) +
+            " fleet @ " +
+            esc(nodeById(f.node).name) +
+            "</div>" +
+            '<div class="hint">Click a pulsing node to move along a lane.</div>' +
+            '<div class="row edit-only"><label>Place at</label><select data-f="fleetnode">' +
+            state.nodes
+              .map(
+                (n) =>
+                  '<option value="' +
+                  n.id +
+                  '"' +
+                  (n.id === f.node ? " selected" : "") +
+                  ">" +
+                  esc(n.name) +
+                  "</option>",
+              )
+              .join("") +
+            "</select></div>" +
+            '<div class="row"><button class="btn warn" data-act="delfleet:' +
+            f.id +
+            '">Remove fleet</button></div>';
+        }
+        $("sel").innerHTML = h;
+      }
+
+      function renderPlayers() {
+        const r = state.rules;
+        $("players").innerHTML = state.players
+          .map((p, i) => {
+            const fl = fleetsOf(i);
+            return (
+              '<div class="pl' +
+              (state.current === i ? " cur" : "") +
+              '" style="--pc:' +
+              p.color +
+              '"><div class="hd"><b>' +
+              esc(p.name) +
+              "</b><span>" +
+              esc(p.faction) +
+              "</span>" +
+              (p.lastStandAt !== null
+                ? '<span class="tag" title="Last stand called: their next turn is used up">Last stand</span>'
+                : state.current === i
+                  ? '<span class="tag">Turn</span>'
+                  : "") +
+              "</div>" +
+              '<div class="edit-only"><div class="row"><label>Name</label><input data-f="pname" data-i="' +
+              i +
+              '" value="' +
+              esc(p.name) +
+              '"><input type="color" data-f="pcolor" data-i="' +
+              i +
+              '" value="' +
+              p.color +
+              '"></div></div>' +
+              '<div class="row"><label>Faction</label><input data-f="pfaction" data-i="' +
+              i +
+              '" value="' +
+              esc(p.faction) +
+              '"></div>' +
+              '<div class="cr"><button class="btn" data-act="cred:' +
+              i +
+              ':-50">−</button><input type="number" step="50" data-f="pcredits" data-i="' +
+              i +
+              '" value="' +
+              p.credits +
+              '"><button class="btn" data-act="cred:' +
+              i +
+              ':50">+</button></div>' +
+              '<div class="st">' +
+              mapsOwned(i) +
+              " maps · " +
+              fl.length +
+              " fleets · +" +
+              income(i) +
+              " / turn</div>" +
+              '<div class="grid"><button class="btn" data-act="buy:' +
+              i +
+              ':fleet" title="Deploys at the selected node, or at their capital">Fleet ' +
+              fleetCost(i) +
+              "</button>" +
+              '<button class="btn" data-act="buy:' +
+              i +
+              ':hero">Hero ' +
+              r.hero +
+              "</button>" +
+              '<button class="btn" data-act="buy:' +
+              i +
+              ':move" title="Price doubles with each one bought this turn">Move pt ' +
+              moveCost(i) +
+              "</button>" +
+              '<button class="btn" data-act="buy:' +
+              i +
+              ':faction">Faction ' +
+              r.factionPick +
+              "</button>" +
+              '<button class="btn" data-act="buy:' +
+              i +
+              ':stand" style="grid-column:span 2">Last stand ' +
+              r.lastStand +
+              "</button></div>" +
+              (fl.length ? '<div style="margin-top:6px">' + fleetRows(fl, true) + "</div>" : "") +
+              "</div>"
+            );
+          })
+          .join("");
+      }
+
+      function renderUI() {
+        document.body.className = edit ? "edit" : "play";
+        $("modeBtn").textContent = edit ? "Edit mode" : "Play mode";
+        $("modeBtn").classList.toggle("on", edit);
+        const p = state.players[state.current];
+        $("turn").innerHTML =
+          "Turn <b>" +
+          state.turn +
+          '</b><span class="dot" style="background:' +
+          p.color +
+          '"></span><b style="color:' +
+          p.color +
+          '">' +
+          esc(p.name) +
+          "</b> to move" +
+          (state.era ? " &nbsp;·&nbsp; Era roll <b>" + state.era.die + "</b> " + esc(state.era.era) : "");
+        document
+          .querySelectorAll("#tools .btn")
+          .forEach((b) => b.classList.toggle("on", b.dataset.act === "tool:" + tool));
+        $("hint").textContent =
+          HINTS[tool] + (tool === "lane" && laneStart ? " Now click the second node." : "");
+        RULES.forEach((r) => {
+          const i = $("rule-" + r[0]);
+          if (document.activeElement !== i) i.value = state.rules[r[0]];
+        });
+        renderSelection();
+        renderPlayers();
+        $("log").innerHTML = state.log.map((l) => "<div>" + esc(l) + "</div>").join("");
+      }
+
+      $("rules").innerHTML = RULES.map(
+        (r) =>
+          '<div class="row"><label style="flex-basis:150px">' +
+          r[1] +
+          '</label><input type="number" step="50" id="rule-' +
+          r[0] +
+          '" data-f="rule" data-i="' +
+          r[0] +
+          '"></div>',
+      ).join("");
+
+      document.addEventListener("click", (e) => {
+        const b = e.target.closest("[data-act]");
+        if (!b) return;
+        const [act, a, c] = b.dataset.act.split(":");
+        const n = sel && sel.kind === "node" ? nodeById(sel.id) : null;
+        switch (act) {
+          case "tool":
+            tool = a;
+            laneStart = null;
+            commit();
+            break;
+          case "mode":
+            edit = !edit;
+            tool = "select";
+            laneStart = null;
+            commit();
+            break;
+          case "undo":
+            undo();
+            break;
+          case "endturn":
+            endTurn();
+            break;
+          case "era":
+            rollEra();
+            break;
+          case "buy":
+            buy(+a, c);
+            break;
+          case "cred":
+            mutate(() => {
+              state.players[+a].credits += +c;
+            });
+            break;
+          case "own":
+            if (n)
+              mutate(() => {
+                n.maps[+a].owner = +c;
+              });
+            break;
+          case "battle":
+            if (n) battle(n, +a, +c);
+            break;
+          case "addmap":
+            if (n) mutate(() => n.maps.push({ name: "Map " + (n.maps.length + 1), owner: -1 }));
+            break;
+          case "delmap":
+            if (n) mutate(() => n.maps.splice(+a, 1));
+            break;
+          case "delsel":
+            if (sel) deleteThing(sel);
+            break;
+          case "selfleet":
+            sel = { kind: "fleet", id: a };
+            commit();
+            break;
+          case "delfleet":
+            deleteThing({ kind: "fleet", id: a });
+            break;
+          case "export": {
+            const u = URL.createObjectURL(
+              new Blob([JSON.stringify(state, null, 1)], { type: "application/json" }),
+            );
+            const l = document.createElement("a");
+            l.href = u;
+            l.download = "seanquest-turn" + state.turn + ".json";
+            l.click();
+            setTimeout(() => URL.revokeObjectURL(u), 1000);
+            break;
+          }
+          case "import":
+            $("file").click();
+            break;
+          case "newgame":
+            if (confirm("Clear ownership, fleets, credits and the turn counter? The board stays."))
+              mutate(() => {
+                const d = defaultState();
+                state.nodes.forEach((x) =>
+                  (x.maps || []).forEach((m) => {
+                    m.owner = -1;
+                  }),
+                );
+                state.players.forEach((p) => {
+                  p.credits = 0;
+                  p.movesBought = 0;
+                  p.lastStandAt = null;
+                });
+                state.fleets = [];
+                state.turn = 1;
+                state.current = 0;
+                state.ply = 0;
+                state.era = null;
+                state.log = d.log;
+                sel = null;
+              });
+            break;
+          case "reset":
+            if (confirm("Restore the default board? This discards every edit."))
+              mutate(() => {
+                state = defaultState();
+                sel = null;
+              });
+            break;
+        }
+      });
+
+      document.addEventListener("change", (e) => {
+        const t = e.target,
+          f = t.dataset.f;
+        if (!f) return;
+        const i = t.dataset.i,
+          n = sel && sel.kind === "node" ? nodeById(sel.id) : null;
+        mutate(() => {
+          if (f === "name" && n) n.name = t.value;
+          else if (f === "type" && n) n.type = t.value;
+          else if (f === "size" && n) n.size = +t.value;
+          else if (f === "ring" && n) n.ring = t.checked;
+          else if (f === "capital" && n) n.capital = t.checked;
+          else if (f === "map" && n) n.maps[+i].name = t.value;
+          else if (f === "value") {
+            const l = state.lanes.find((x) => x.id === sel.id);
+            if (l) l.value = +t.value || 0;
+          } else if (f === "fleetnode") {
+            const fl = state.fleets.find((x) => x.id === sel.id);
+            if (fl) {
+              fl.node = t.value;
+              fleetPos.delete(fl.id);
+            }
+          } else if (f === "pname") state.players[+i].name = t.value || "Player " + (+i + 1);
+          else if (f === "pcolor") state.players[+i].color = t.value;
+          else if (f === "pfaction") state.players[+i].faction = t.value;
+          else if (f === "pcredits") state.players[+i].credits = Math.round(+t.value) || 0;
+          else if (f === "rule") state.rules[i] = +t.value || 0;
+        });
+      });
+
+      $("file").addEventListener("change", (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const rd = new FileReader();
+        rd.onload = () => {
+          try {
+            const s = normalize(JSON.parse(rd.result));
+            mutate(() => {
+              state = s;
+              sel = null;
+            });
+            toast("Board loaded");
+          } catch (err) {
+            toast("Could not load: " + err.message);
+          }
+        };
+        rd.readAsText(file);
+        e.target.value = "";
+      });
+
+      addEventListener("keydown", (e) => {
+        if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+          e.preventDefault();
+          undo();
+        } else if (e.key === "Escape") {
+          sel = null;
+          laneStart = null;
+          tool = "select";
+          commit();
+        } else if ((e.key === "Delete" || e.key === "Backspace") && edit && sel) deleteThing(sel);
+      });
+
+      resize();
+      syncScene();
+      renderUI();
+      requestAnimationFrame(frame);
+    </script>
+  </body>
+</html>
