@@ -21,6 +21,9 @@
   Do not create the desktop shortcut.
 .PARAMETER Verify
   Install nothing; only check that the mods this script installed are still in place.
+.PARAMETER Undo
+  Remove these mods again, e.g. -Undo ai  or  -Undo xbox-dlc. Works for mods this script copied
+  in itself; a mod that used its own installer has to be removed with Steam's file verification.
 #>
 [CmdletBinding()]
 param(
@@ -29,7 +32,8 @@ param(
     [string[]]$Only,
     [switch]$Force,
     [switch]$NoShortcut,
-    [switch]$Verify
+    [switch]$Verify,
+    [string[]]$Undo
 )
 
 $ErrorActionPreference = 'Stop'
@@ -38,6 +42,7 @@ try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::S
 
 # "-Only a,b" arrives as one string when the script is started with -File, so split it here.
 if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+if ($Undo) { $Undo = @($Undo | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 
 $Root        = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DownloadDir = Join-Path $Root 'downloads'
@@ -49,6 +54,8 @@ $ArchiveExt  = @('.zip', '.7z', '.rar', '.exe')
 #   - hd-graphics goes first so the interface mod's files end up on top of it.
 #   - remaster-ui already contains the unofficial 1.3 patch; its author says never to install the
 #     1.3 patch after it, so patch-1.3 is only used when remaster-ui is not selected.
+#   - bf1-maps goes before xbox-dlc: the board needs six maps only the BF1 pack has, so if the two
+#     ever want the same addon folder, the BF1 pack's copy is the one that is kept.
 #   - shader-patch goes last.
 # Kind: installer = an .exe you click through; addon = folders copied into GameData\addon;
 #       overlay = files copied over GameData; lvl = stock .lvl files replaced.
@@ -74,16 +81,16 @@ $Mods = @(
        Sha256 = 'b7f799b1eeac1ac3ec6a0e098a7d161d5aa8fd7ac8fc85371dcc7feb613bfedf'
        Contains = @('GameData/data/_lvl_pc/shell.lvl', 'GameData/addon/AAA-v1.3patch/addme.script')
        Markers  = @('addon/AAA-v1.3patch/addme.script', 'data/_lvl_pc/v1.3patch_strings.lvl') }
-    @{ Key = 'xbox-dlc'; Name = 'Xbox DLC and Title Update content for PC'; Default = $true; Source = 'moddb'; Kind = 'addon'
-       What = 'Bespin Cloud City, Rhen Var Citadel and Harbor, Yavin 4 Arena, Kit Fisto, Asajj Ventress.'
-       NameLike = 'xbox|dlc'; MinMB = 5; MaxMB = 300; Contains = @('DLC_XBOX', 'UPDATE_XBOX', 'addme.script')
-       Url  = 'https://www.moddb.com/mods/xbox-dlc-content-for-pc/downloads/xbox-dlc-and-title-update-content-for-pc' }
     @{ Key = 'bf1-maps'; Name = "Marvel4's Conversion Pack 1.1"; Default = $true; Source = 'moddb'; Kind = 'addon'
        What = '13 Battlefront 1 maps, including every BF1 map on the Seanquest board.'
        NameLike = 'marvel|conversion'; MinMB = 20; MaxMB = 5000; Contains = @('addme.script')
        Url  = 'https://www.moddb.com/downloads/marvel4s-conversion-pack-11' }
-    @{ Key = 'ai'; Name = 'AI Difficulty mod 2.0'; Default = $false; Source = 'moddb'; Kind = 'lvl'
-       What = 'EXPERIMENTAL. Forces Elite AI on the stock maps by replacing mission.lvl. May clash with other mods.'
+    @{ Key = 'xbox-dlc'; Name = 'Xbox DLC and Title Update content for PC'; Default = $true; Source = 'moddb'; Kind = 'addon'
+       What = 'Bespin Cloud City, Rhen Var Citadel and Harbor, Yavin 4 Arena, Kit Fisto, Asajj Ventress.'
+       NameLike = 'xbox|dlc'; MinMB = 5; MaxMB = 300; Contains = @('DLC_XBOX', 'UPDATE_XBOX', 'addme.script')
+       Url  = 'https://www.moddb.com/mods/xbox-dlc-content-for-pc/downloads/xbox-dlc-and-title-update-content-for-pc' }
+    @{ Key = 'ai'; Name = 'AI Difficulty mod 2.0'; Default = $true; Source = 'moddb'; Kind = 'lvl'
+       What = 'Elite AI on the stock maps (replaces mission.lvl). If stock maps misbehave afterwards: install-mods.bat -Undo ai'
        NameLike = 'ai'; MaxMB = 300; Contains = @('mission.lvl')
        Url  = 'https://www.moddb.com/games/star-wars-battlefront-ii/downloads/ai-difficulty-mod' }
     @{ Key = 'shader-patch'; Name = 'Shader Patch (PrismaticFlower)'; Default = $true; Source = 'github'; Kind = 'overlay-root'
@@ -336,7 +343,9 @@ function Compare-GameSnapshot($Before, $After) {
 }
 
 # What gets remembered about an installed mod, so it can be re-checked later.
-function New-InstallRecord($Changed, [string]$GameData) {
+# $Files is the full list of files this script copied itself (empty when the mod's own installer
+# did the work); it is what -Undo walks back.
+function New-InstallRecord($Changed, [string]$GameData, $Files) {
     $changed = @($Changed)
     $addons = @($changed | Where-Object { $_ -like 'addon/*/addme.script' } | ForEach-Object { ($_ -split '/')[1] } | Select-Object -Unique)
     $step = [int][math]::Max(1, [math]::Floor($changed.Count / 25))
@@ -345,7 +354,46 @@ function New-InstallRecord($Changed, [string]$GameData) {
     foreach ($rel in ($changed | Where-Object { $_ -like 'data/_lvl_pc/*.lvl' -and $_ -notlike 'data/_lvl_pc/*/*' })) {
         $hashes[$rel] = (Get-FileHash -LiteralPath (Join-Path $GameData $rel) -Algorithm SHA256).Hash.ToLower()
     }
-    return @{ Date = (Get-Date).ToString('s'); Changed = $changed.Count; Addon = $addons; Sample = $sample; Hashes = $hashes }
+    return @{ Date = (Get-Date).ToString('s'); Changed = $changed.Count; Addon = $addons; Sample = $sample; Hashes = $hashes; Files = @($Files) }
+}
+
+# Which installed mod put this addon folder there, if any.
+function Get-AddonOwner([string]$Name) {
+    foreach ($key in @($script:Installed.Keys)) {
+        if (@($script:Installed[$key].Addon) -contains $Name) { return $key }
+    }
+    return $null
+}
+
+# Takes a mod back out: restores every original it replaced and deletes the files it added.
+function Undo-Mod($Mod, $Record, [string]$GameData, [string]$BackupDir) {
+    $files = @(@($Record.Files) | Where-Object { $_ })
+    if (-not $files.Count) {
+        Write-Warn "$($Mod.Name) was put in by its own installer, so this script cannot take it out."
+        Write-Warn 'Use Steam > game Properties > Installed Files > Verify integrity of game files.'
+        return $false
+    }
+    $restored = 0; $removed = 0
+    foreach ($rel in $files) {
+        $file = Join-Path $GameData $rel
+        $backup = Join-Path $BackupDir $rel
+        if (Test-Path -LiteralPath $backup) {
+            Copy-Item -LiteralPath $backup -Destination $file -Force
+            Remove-Item -LiteralPath $backup -Force
+            $restored++
+        } elseif (Test-Path -LiteralPath $file) {
+            Remove-Item -LiteralPath $file -Force
+            $removed++
+        }
+    }
+    foreach ($name in @($Record.Addon)) {
+        $dir = Join-Path $GameData "addon/$name"
+        if ($name -and (Test-Path -LiteralPath $dir) -and -not (Get-ChildItem -LiteralPath $dir -Recurse -File -Force | Select-Object -First 1)) {
+            Remove-Item -LiteralPath $dir -Recurse -Force
+        }
+    }
+    Write-Ok "$($Mod.Name) removed: $removed files deleted, $restored originals restored."
+    return $true
 }
 
 # Re-checks one installed mod against the game folder. Returns a list of problems (empty = fine).
@@ -553,12 +601,25 @@ function Install-Mod($Mod, [string]$File, [string]$GameData, [string]$BackupDir)
         'addon' {
             $addonDir = Join-Path $GameData 'addon'
             New-Item -ItemType Directory -Path $addonDir -Force | Out-Null
+            $placed = 0
             foreach ($folder in $layout.Paths) {
                 $name = Split-Path -Leaf $folder
+                # Two mods using the same addon folder name would overwrite each other's maps, so a
+                # folder that is already there from something else is left alone and reported.
+                if (Test-Path -LiteralPath (Join-Path $addonDir $name)) {
+                    $owner = Get-AddonOwner $name
+                    if ($owner -ne $Mod.Key) {
+                        $from = 'something this script did not install'; if ($owner) { $from = $owner }
+                        Write-Warn "CLASH: addon\$name already exists (from $from). Left as it is; this mod's copy was not installed."
+                        $script:Clashes += "addon\$name : $($Mod.Key) vs $from"
+                        continue
+                    }
+                }
                 $r = Copy-Overlay $folder (Join-Path $addonDir $name) (Join-Path $BackupDir (Join-Path 'addon' $name))
                 Write-Info "addon\$name : $($r.Copied) files"
+                $placed++
             }
-            return $true
+            return [bool]$placed
         }
         'installer' { return (Start-ModInstaller $layout.Path $GameData) }
         default {
@@ -650,6 +711,25 @@ function Invoke-Main {
     }
     $backupDir = Join-Path $gameData '_seanquest_backup'
 
+    $script:Installed = $installed
+    $script:Clashes = @()
+
+    if ($Undo) {
+        foreach ($key in $Undo) {
+            $mod = $Mods | Where-Object { $_.Key -eq $key } | Select-Object -First 1
+            if (-not $mod) { Write-Warn "No mod is called '$key'. Keys: $(($Mods | ForEach-Object { $_.Key }) -join ', ')"; continue }
+            Write-Step "Removing $($mod.Name)"
+            if (-not $installed.ContainsKey($key)) { Write-Info 'This script has not installed it here.'; continue }
+            if (Undo-Mod $mod $installed[$key] $gameData $backupDir) {
+                $installed.Remove($key)
+                $installed | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $statePath
+            }
+        }
+        Write-Step 'Verifying what is still installed'
+        [void](Invoke-Verification $installed $gameData)
+        return
+    }
+
     if ($Verify) {
         Write-Step 'Verifying installed mods'
         $bad = Invoke-Verification $installed $gameData
@@ -664,8 +744,8 @@ function Invoke-Main {
     if (-not $queue.Count) { Write-Info 'Nothing to install.'; return }
 
     if ($chosen['xbox-dlc'] -and $chosen['bf1-maps']) {
-        Write-Warn "The Xbox DLC's author says it may clash with BF1 map packs, and Marvel4's pack already has the four DLC maps."
-        Write-Warn 'If the game crashes or maps are doubled up, delete the DLC_XBOX and UPDATE_XBOX folders from GameData\addon.'
+        Write-Info "Note: the Xbox DLC's author says it may clash with BF1 map packs, and Marvel4's pack already has the four DLC maps."
+        Write-Info 'Folder-name clashes are caught during install. If maps are doubled or the game crashes: install-mods.bat -Undo xbox-dlc'
     }
     $needGb = 3; if ($queue | Where-Object { $_.Key -eq 'hd-graphics' }) { $needGb = 16 }
     try {
@@ -693,7 +773,7 @@ function Invoke-Main {
         if ($ok) {
             $changed = @(@(Compare-GameSnapshot $script:Snapshot (Get-GameSnapshot $gameData)) + $script:Touched | Sort-Object -Unique)
             # Round-trip through JSON so a record made now looks the same as one loaded from disk.
-            $record = New-InstallRecord $changed $gameData | ConvertTo-Json -Depth 5 | ConvertFrom-Json
+            $record = New-InstallRecord $changed $gameData $script:Touched | ConvertTo-Json -Depth 5 | ConvertFrom-Json
             $problems = @(Test-InstalledMod $mod $record $gameData)
             if ($problems.Count) {
                 Write-Warn "Installed, but it does not check out: $($problems -join '; ')"
@@ -717,10 +797,15 @@ function Invoke-Main {
     Write-Step 'Verifying everything this script has installed'
     $bad = Invoke-Verification $installed $gameData
     if ($bad) { Write-Warn "$bad mod(s) failed the check. Run this script again with -Force to reinstall them." }
+    if ($script:Clashes.Count) {
+        Write-Warn 'Addon folders that two mods both wanted (the first one installed was kept):'
+        foreach ($c in $script:Clashes) { Write-Warn "  $c" }
+    }
     Write-Info ''
     Write-Info "Replaced files were backed up to: $backupDir"
     Write-Info 'Both players need the same map mods (xbox-dlc, bf1-maps) to play together.'
     Write-Info 'Galactic Conquest bonuses in any match: pause, open Fake Console, pick "Bonus 1 ..." or "Bonus 2 ...".'
+    Write-Info 'To take one mod back out: install-mods.bat -Undo <key>   (for example -Undo ai, or -Undo xbox-dlc)'
     Write-Info 'To undo everything: Steam > game Properties > Installed Files > Verify integrity, then delete GameData\addon.'
 }
 

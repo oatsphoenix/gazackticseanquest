@@ -17,11 +17,11 @@ Both players need to run it so their map mods match.
 |---|---|---|---|
 | `hd-graphics` | Battlefront 2 Remaster (Harrisonfog) | HD maps, models, lighting, sound | ModDB, 4.8 GB, its own installer |
 | `remaster-ui` | Battlefront II Remastered 1.5 r2 ([GT]Anakin) | Menus and HUD for modern screens, AI heroes, the unofficial 1.3 patch (bug fixes, Fake Console) | ModDB, its own installer |
-| `xbox-dlc` | Xbox DLC and Title Update content | Bespin Cloud City, Rhen Var Citadel and Harbor, Yavin 4 Arena, Kit Fisto, Asajj Ventress | ModDB |
 | `bf1-maps` | Marvel4's Conversion Pack 1.1 | 13 Battlefront 1 maps | ModDB |
+| `xbox-dlc` | Xbox DLC and Title Update content | Bespin Cloud City, Rhen Var Citadel and Harbor, Yavin 4 Arena, Kit Fisto, Asajj Ventress | ModDB |
+| `ai` | AI Difficulty mod 2.0 | Elite AI on stock maps (replaces `mission.lvl`) | ModDB |
 | `shader-patch` | Shader Patch | Modern renderer | GitHub, automatic |
 | `patch-1.3` | Unofficial 1.3 patch r130 | Bug fixes and Fake Console alone (off by default: `remaster-ui` already includes it) | GitHub, automatic |
-| `ai` | AI Difficulty mod 2.0 | Elite AI on stock maps (off by default: experimental) | ModDB |
 
 ModDB blocks scripted downloads, so for those the script opens the page in your browser, waits for the
 file to land in your Downloads folder, and asks you to confirm it before using it.
@@ -44,6 +44,7 @@ installer are not backed up; Steam's "Verify integrity of game files" restores t
 
 ```
 install-mods.bat -Verify                    check the installed mods, install nothing
+install-mods.bat -Undo ai                   take one mod back out (also: -Undo xbox-dlc)
 install-mods.bat -Only bf1-maps,xbox-dlc    install just these
 install-mods.bat -Yes                       take the default set without the menu
 install-mods.bat -Force                     reinstall mods already installed
@@ -57,8 +58,14 @@ With `remaster-ui` (or `patch-1.3`) installed: pause the match, open **Fake Cons
 
 ## Known rough edges
 
-- The Xbox DLC's author warns it may clash with BF1 map packs, and Marvel4's pack already contains the
-  four DLC maps. If maps are doubled or the game crashes, delete `DLC_XBOX` and `UPDATE_XBOX` from
-  `GameData\addon`.
+- **BF1 maps and the Xbox DLC.** Marvel4's pack is the base: it has every BF1 map on the board,
+  including the four the DLC also ships. The DLC goes on second for Kit Fisto, Asajj Ventress and the
+  official versions of those four maps. If both mods want the same addon folder, the BF1 pack's copy is
+  kept and the clash is reported. The DLC's author warns it may clash with BF1 packs in other ways; if
+  maps are doubled or the game crashes, run `install-mods.bat -Undo xbox-dlc`.
+- **AI mod.** It replaces a core game file. If stock maps misbehave after installing it, run
+  `install-mods.bat -Undo ai`, which puts the original file back.
+- `-Undo` only works for mods the script copied in itself. The two mods with their own installers
+  (`hd-graphics`, `remaster-ui`) are removed with Steam's "Verify integrity of game files".
 - The install order (HD graphics, then the interface mod, then maps, then Shader Patch) follows
   community guides; it has not been tested end to end by this project.
