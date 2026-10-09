@@ -24,6 +24,11 @@
 .PARAMETER Undo
   Remove these mods again, e.g. -Undo ai  or  -Undo xbox-dlc. Works for mods this script copied
   in itself; a mod that used its own installer has to be removed with Steam's file verification.
+.PARAMETER MakeSetList
+  Write setlist.json from this PC's install, replacing any existing one. The set list is what makes
+  two players' installs identical: give the file to the other player (next to their install-mods.bat).
+.PARAMETER NoSetList
+  Ignore any set list and choose mods freely.
 #>
 [CmdletBinding()]
 param(
@@ -33,7 +38,9 @@ param(
     [switch]$Force,
     [switch]$NoShortcut,
     [switch]$Verify,
-    [string[]]$Undo
+    [string[]]$Undo,
+    [switch]$MakeSetList,
+    [switch]$NoSetList
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +55,9 @@ $Root        = Split-Path -Parent $MyInvocation.MyCommand.Path
 $DownloadDir = Join-Path $Root 'downloads'
 $WorkDir     = Join-Path $Root 'work'
 $ArchiveExt  = @('.zip', '.7z', '.rar', '.exe')
+$SetListPath = Join-Path $Root 'setlist.json'
+# A set list published with the project is picked up automatically when there is none beside the script.
+$SetListUrl  = 'https://oatsphoenix.github.io/gazackticseanquest/mods/setlist.json'
 
 # -----------------------------------------------------------------------------------------------
 # The mod set, in install order. Order matters:
@@ -273,6 +283,17 @@ function Get-PackageLayout([string]$Dir) {
 function Test-ModDownload($Mod, [string]$File) {
     $item = Get-Item -LiteralPath $File
     $sizeMb = [math]::Round($item.Length / 1MB, 1)
+    $listed = $null
+    if ($script:SetList -and $script:SetList.mods) { $listed = $script:SetList.mods.($Mod.Key) }
+    if ($listed -and $listed.sha256) {
+        $hash = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLower()
+        if ($hash -eq $listed.sha256) { Write-Ok "Identical to the file the set list was made with ($sizeMb MB)."; return $true }
+        Write-Warn "This is not the same file the set list was made with (a different version or a damaged download)."
+        Write-Warn "Expected $($listed.bytes) bytes with checksum $($listed.sha256.Substring(0, 12))..., got $($item.Length) bytes with $($hash.Substring(0, 12))..."
+        Remove-Item -LiteralPath $File -Force
+        Remove-Item -LiteralPath "$File.sha256" -Force -ErrorAction SilentlyContinue
+        return $false
+    }
     # The checksum to expect: the one saved beside the file when it was downloaded (GitHub publishes
     # one per release file), or else the pinned one for a download that only ever has one version.
     $expected = $null
@@ -437,6 +458,95 @@ function Invoke-Verification($Installed, [string]$GameData) {
 }
 
 # -----------------------------------------------------------------------------------------------
+# The set list: one player's exact install, written down so the other player's can be made identical
+# -----------------------------------------------------------------------------------------------
+# It records which mods, the checksum of each downloaded file, and a checksum of every file in the two
+# folders mods live in (addon and data\_lvl_pc). With a set list present the script installs exactly
+# those mods, refuses any download that is not byte-for-byte the same file, and compares the result.
+
+# Checksums every file under addon and data/_lvl_pc. Paths are lower-cased and sorted the same way on
+# every PC, so two identical installs always produce the same code.
+function Get-GameFingerprint([string]$GameData) {
+    $root = $GameData.TrimEnd('\', '/')
+    $files = @{}
+    foreach ($sub in @('addon', 'data/_lvl_pc')) {
+        $dir = Join-Path $root $sub
+        if (-not (Test-Path -LiteralPath $dir)) { continue }
+        foreach ($f in Get-ChildItem -LiteralPath $dir -Recurse -File -Force) {
+            $rel = ($f.FullName.Substring($root.Length).TrimStart('\', '/') -replace '\\', '/').ToLowerInvariant()
+            $files[$rel] = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLower()
+        }
+    }
+    $keys = [string[]]@($files.Keys)
+    [Array]::Sort($keys, [StringComparer]::Ordinal)
+    $lines = foreach ($k in $keys) { "$k|$($files[$k])" }
+    $temp = [IO.Path]::GetTempFileName()
+    [IO.File]::WriteAllText($temp, ($lines -join "`n"), (New-Object Text.UTF8Encoding($false)))
+    $hash = (Get-FileHash -LiteralPath $temp -Algorithm SHA256).Hash.ToLower()
+    Remove-Item -LiteralPath $temp -Force
+    return @{ Hash = $hash; Code = ($hash.Substring(0, 4) + '-' + $hash.Substring(4, 4)).ToUpper(); Files = $files }
+}
+
+function Read-SetList {
+    if ($NoSetList -or $MakeSetList) { return $null }
+    if (-not (Test-Path -LiteralPath $SetListPath)) {
+        # Download to a temporary name so a failed request (there may be no published list) leaves nothing behind.
+        $temp = "$SetListPath.download"
+        try {
+            Invoke-WebRequest -Uri $SetListUrl -OutFile $temp -UseBasicParsing
+            [void](Get-Content -LiteralPath $temp -Raw | ConvertFrom-Json)
+            Move-Item -LiteralPath $temp -Destination $SetListPath -Force
+            Write-Info 'Fetched the published set list.'
+        } catch { Remove-Item -LiteralPath $temp -Force -ErrorAction SilentlyContinue }
+    }
+    if (-not (Test-Path -LiteralPath $SetListPath)) { return $null }
+    try { return (Get-Content -LiteralPath $SetListPath -Raw | ConvertFrom-Json) } catch { Write-Warn "setlist.json could not be read: $($_.Exception.Message)"; return $null }
+}
+
+function Write-SetList($Installed, [string]$GameData) {
+    Write-Info 'Checksumming the mod folders (a few minutes with the HD graphics mod installed)...'
+    $print = Get-GameFingerprint $GameData
+    $entries = [ordered]@{}   # not $mods: PowerShell names ignore case, and $Mods is the mod table
+    foreach ($mod in $Mods) {
+        if (-not $Installed.ContainsKey($mod.Key)) { continue }
+        $entry = @{ name = $mod.Name }
+        $file = Get-CachedDownload $mod.Key
+        if ($file) { $entry.sha256 = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLower(); $entry.bytes = (Get-Item -LiteralPath $file).Length }
+        else { Write-Warn "The download for $($mod.Name) is no longer in the downloads folder, so the other player's copy of it cannot be checked." }
+        $entries[$mod.Key] = $entry
+    }
+    [ordered]@{ made = (Get-Date).ToString('s'); code = $print.Code; fingerprint = $print.Hash; mods = $entries; files = $print.Files } |
+        ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $SetListPath
+    Write-Ok "Set list written: $SetListPath"
+    Write-Host "   SET CODE: $($print.Code)" -ForegroundColor Cyan
+    Write-Info 'Give setlist.json to the other player: it goes next to their install-mods.bat before they run it.'
+}
+
+# Compares this PC with the set list. Returns $true on an exact match.
+function Compare-SetList($SetList, [string]$GameData) {
+    Write-Info 'Checksumming the mod folders (a few minutes with the HD graphics mod installed)...'
+    $print = Get-GameFingerprint $GameData
+    if ($print.Hash -eq $SetList.fingerprint) {
+        Write-Host "   MATCH: this install is identical to the set list.  SET CODE: $($print.Code)" -ForegroundColor Green
+        return $true
+    }
+    $want = @{}
+    foreach ($p in $SetList.files.PSObject.Properties) { $want[$p.Name] = $p.Value }
+    $missing = @($want.Keys | Where-Object { -not $print.Files.ContainsKey($_) } | Sort-Object)
+    $extra   = @($print.Files.Keys | Where-Object { -not $want.ContainsKey($_) } | Sort-Object)
+    $differ  = @($want.Keys | Where-Object { $print.Files.ContainsKey($_) -and $print.Files[$_] -ne $want[$_] } | Sort-Object)
+    Write-Host "   MISMATCH: this install is NOT the same as the set list.  Yours: $($print.Code)  Set list: $($SetList.code)" -ForegroundColor Red
+    foreach ($group in @(@('Missing here', $missing), @('Only here', $extra), @('Different contents', $differ))) {
+        $list = @($group[1])
+        if (-not $list.Count) { continue }
+        Write-Host "   $($group[0]): $($list.Count) file(s)" -ForegroundColor Yellow
+        foreach ($f in ($list | Select-Object -First 12)) { Write-Host "     $f" }
+        if ($list.Count -gt 12) { Write-Host "     ... and $($list.Count - 12) more" }
+    }
+    return $false
+}
+
+# -----------------------------------------------------------------------------------------------
 # Downloads
 # -----------------------------------------------------------------------------------------------
 function Get-CachedDownload([string]$Key) {
@@ -451,7 +561,7 @@ function Get-DirectDownload($Mod) {
     if (Test-Path -LiteralPath $target) { Write-Info "Already downloaded: $($Mod.File)"; return $target }
     $url = $Mod.Url
     $expected = $Mod.Sha256   # right for the pinned URL; replaced below if a newer release is used
-    if ($Mod.Source -eq 'github') {
+    if ($Mod.Source -eq 'github' -and -not $script:SetList) {
         # Prefer the newest release; fall back to the pinned one if GitHub's API cannot be reached.
         try {
             $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$($Mod.Repo)/releases/latest" -Headers @{ 'User-Agent' = 'seanquest-mod-installer' }
@@ -636,6 +746,12 @@ function Install-Mod($Mod, [string]$File, [string]$GameData, [string]$BackupDir)
 function Select-Mods($Installed) {
     $chosen = @{}
     foreach ($m in $Mods) { $chosen[$m.Key] = [bool]$m.Default }
+    if ($script:SetList) {
+        foreach ($m in $Mods) { $chosen[$m.Key] = [bool]($script:SetList.mods.PSObject.Properties.Name -contains $m.Key) }
+        Write-Info "Following the set list (code $($script:SetList.code)): $(($Mods | Where-Object { $chosen[$_.Key] } | ForEach-Object { $_.Key }) -join ', ')"
+        Write-Info 'To choose mods freely instead, run with -NoSetList.'
+        return $chosen
+    }
     if ($Only) {
         foreach ($m in $Mods) { $chosen[$m.Key] = ($m.Key -in $Only) }
     } elseif (-not $Yes) {
@@ -713,6 +829,14 @@ function Invoke-Main {
 
     $script:Installed = $installed
     $script:Clashes = @()
+    $script:SetList = Read-SetList
+
+    if ($MakeSetList) {
+        Write-Step 'Writing the set list from this install'
+        if (-not $installed.Count) { Stop-Script 'This script has not installed anything here yet, so there is nothing to list.' }
+        Write-SetList $installed $gameData
+        return
+    }
 
     if ($Undo) {
         foreach ($key in $Undo) {
@@ -733,6 +857,9 @@ function Invoke-Main {
     if ($Verify) {
         Write-Step 'Verifying installed mods'
         $bad = Invoke-Verification $installed $gameData
+        Write-Step 'Comparing with the set list'
+        if ($script:SetList) { if (-not (Compare-SetList $script:SetList $gameData)) { $bad++ } }
+        else { Write-Info "No set list here. This install's code: $((Get-GameFingerprint $gameData).Code)" }
         if ($bad) { exit 1 }
         return
     }
@@ -800,6 +927,15 @@ function Invoke-Main {
     if ($script:Clashes.Count) {
         Write-Warn 'Addon folders that two mods both wanted (the first one installed was kept):'
         foreach ($c in $script:Clashes) { Write-Warn "  $c" }
+    }
+
+    Write-Step 'Set list'
+    if ($script:SetList) {
+        if (-not (Compare-SetList $script:SetList $gameData)) {
+            Write-Warn 'Until this says MATCH, the two installs are not guaranteed to be the same.'
+        }
+    } elseif ($installed.Count) {
+        Write-SetList $installed $gameData
     }
     Write-Info ''
     Write-Info "Replaced files were backed up to: $backupDir"

@@ -9,7 +9,26 @@ version of the 2005 game. It does not work with the Classic Collection re-releas
 2. Double-click `install-mods.bat`.
 3. Pick the mods (the defaults are the recommended set) and press Enter.
 
-Both players need to run it so their map mods match.
+Both players run it. The set list (below) is what guarantees the two installs come out the same.
+
+## The set list: same mods on both PCs
+
+1. **Player 1** runs the installer. At the end it writes `setlist.json` next to the script and shows a
+   set code such as `D530-2A33`.
+2. Player 1 sends `setlist.json` to player 2, who puts it next to their `install-mods.bat` **before**
+   running it.
+3. **Player 2** runs the installer. With a set list present it:
+   - installs exactly the mods on the list (no menu),
+   - refuses any download that is not byte-for-byte the file player 1 used,
+   - compares the finished install with player 1's and prints `MATCH` or `MISMATCH`.
+
+`MATCH` with the same set code on both PCs means every file in the game's mod folders (`addon` and
+`data\_lvl_pc`) is identical. `MISMATCH` lists the files that are missing, extra or different.
+
+`install-mods.bat -Verify` repeats the comparison at any time, for example before a session.
+
+If a `setlist.json` is published in this folder of the project, the script fetches it by itself and
+step 2 is not needed.
 
 ## What it installs
 
@@ -45,6 +64,8 @@ installer are not backed up; Steam's "Verify integrity of game files" restores t
 ```
 install-mods.bat -Verify                    check the installed mods, install nothing
 install-mods.bat -Undo ai                   take one mod back out (also: -Undo xbox-dlc)
+install-mods.bat -MakeSetList               rewrite setlist.json from this PC's install
+install-mods.bat -NoSetList                 ignore the set list and choose mods freely
 install-mods.bat -Only bf1-maps,xbox-dlc    install just these
 install-mods.bat -Yes                       take the default set without the menu
 install-mods.bat -Force                     reinstall mods already installed
@@ -57,6 +78,10 @@ With `remaster-ui` (or `patch-1.3`) installed: pause the match, open **Fake Cons
 `Bonus 1 ...` or `Bonus 2 ...` for team 1 or 2.
 
 ## Known rough edges
+
+- **Set list and settings files.** The comparison covers every file in the mod folders, so if a mod
+  keeps a per-player settings file in there, two otherwise identical installs can report a mismatch on
+  that one file. The mismatch list names it.
 
 - **BF1 maps and the Xbox DLC.** Marvel4's pack is the base: it has every BF1 map on the board,
   including the four the DLC also ships. The DLC goes on second for Kit Fisto, Asajj Ventress and the
