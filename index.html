@@ -1942,7 +1942,8 @@
         $("players").innerHTML = state.players
           .map((p, i) => {
             const fl = fleetsOf(i),
-              off = offTurn(i) ? " disabled" : "";
+              // greyed out when it is not their turn or they cannot afford it
+              off = (cost, turnLocked) => ((turnLocked && offTurn(i)) || cost > p.credits ? " disabled" : "");
             return (
               '<div class="pl' +
               (state.current === i ? " cur" : "") +
@@ -1992,34 +1993,36 @@
               '<div class="grid"><button class="btn" data-act="buy:' +
               i +
               ':fleet" title="Deploys at the selected node, or at their capital"' +
-              off +
+              off(fleetCost(i), true) +
               ">Fleet " +
               fleetCost(i) +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
               ':hero"' +
-              off +
+              off(r.hero, true) +
               ">Hero " +
               r.hero +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
               ':move" title="Price doubles with each one bought this turn"' +
-              off +
+              off(moveCost(i), true) +
               ">Move pt " +
               moveCost(i) +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
               ':faction"' +
-              off +
+              off(r.factionPick, true) +
               ">Faction " +
               r.factionPick +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':stand" style="grid-column:span 2">Last stand ' +
+              ':stand" style="grid-column:span 2"' +
+              off(r.lastStand, false) +
+              ">Last stand " +
               r.lastStand +
               "</button></div>" +
               (fl.length ? '<div style="margin-top:6px">' + fleetRows(fl, true) + "</div>" : "") +
