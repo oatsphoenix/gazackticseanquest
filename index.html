@@ -678,6 +678,7 @@
               m.name = String(m.name || "");
               m.owner = m.owner === 0 || m.owner === 1 ? m.owner : -1;
             });
+            if (n.maps.length !== 1) n.capital = false;
           }
         });
         const ids = new Set(s.nodes.map((n) => n.id));
@@ -733,6 +734,7 @@
         return n <= 1 ? 0 : state.rules.fleetBase * 2 ** (n - 2);
       };
       const moveCost = (pi) => state.rules.moveBase * 2 ** state.players[pi].movesBought;
+      const canBeCapital = (n) => n.kind === "planet" && n.maps.length === 1; // one battle takes a capital
       const isUnclaimed = (n) => n.kind === "planet" && n.maps.length > 0 && n.maps.every((m) => m.owner < 0);
       const laneBetween = (a, b) =>
         state.lanes.find((l) => (l.a === a && l.b === b) || (l.b === a && l.a === b));
@@ -955,25 +957,60 @@
             state.phase = "draft";
             log("New game: planets are picked in turns. " + names[first] + " picks first.");
           } else {
-            for (let i = planets.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1));
-              [planets[i], planets[j]] = [planets[j], planets[i]];
-            }
-            planets.forEach((n, i) => {
-              n.maps.forEach((m) => (m.owner = (first + i) % 2));
-              if (o.capitals && i < 2) n.capital = true;
-            });
+            const deal = dealPlanets(planets, o.capitals);
+            planets.forEach((n, i) => n.maps.forEach((m) => (m.owner = deal[i])));
+            if (o.capitals)
+              [0, 1].forEach((pi) => {
+                const singles = planets.filter((n, i) => deal[i] === pi && canBeCapital(n));
+                if (singles.length) singles[Math.floor(Math.random() * singles.length)].capital = true;
+              });
             state.phase = "play";
-            log("New game: planets dealt at random. " + names[first] + " moves first.");
+            log(
+              "New game: planets dealt at random, " +
+                names.map((nm, pi) => nm + " " + mapsOwned(pi) + " maps").join(", ") +
+                ". " +
+                names[first] +
+                " moves first.",
+            );
           }
         });
+      }
+      // Random split of the planets that gives both commanders the same number of maps (battles), or as
+      // close as the board allows. Returns the owner (0 or 1) of each planet. When capitals are wanted,
+      // splits that leave a commander without a single-map planet are avoided if an equally even one exists.
+      function dealPlanets(planets, wantCapitals) {
+        const n = planets.length,
+          w = planets.map((p) => p.maps.length),
+          total = w.reduce((a, b) => a + b, 0);
+        let best = [],
+          bestScore = Infinity;
+        const consider = (own) => {
+          let a = 0;
+          const single = [false, false];
+          for (let i = 0; i < n; i++) {
+            if (own[i] === 0) a += w[i];
+            if (w[i] === 1) single[own[i]] = true;
+          }
+          const score = Math.abs(total - 2 * a) * 4 + (wantCapitals ? !single[0] + !single[1] : 0);
+          if (score < bestScore) {
+            best = [own];
+            bestScore = score;
+          } else if (score === bestScore) best.push(own);
+        };
+        if (n <= 16) for (let m = 0; m < 1 << n; m++) consider(w.map((_, i) => (m >> i) & 1));
+        else for (let t = 0; t < 20000; t++) consider(w.map(() => (Math.random() < 0.5 ? 0 : 1)));
+        return best.length ? best[Math.floor(Math.random() * best.length)] : [];
       }
       function draftPick(n) {
         mutate(() => {
           const pi = state.current,
             p = state.players[pi];
           n.maps.forEach((m) => (m.owner = pi));
-          if (state.draftCapitals && !state.nodes.some((x) => x !== n && x.capital && fullOwner(x) === pi))
+          if (
+            state.draftCapitals &&
+            canBeCapital(n) &&
+            !state.nodes.some((x) => x !== n && x.capital && fullOwner(x) === pi)
+          )
             n.capital = true;
           log(p.name + " picked " + n.name + (n.capital ? " as their capital" : ""));
           if (state.nodes.some(isUnclaimed)) state.current = 1 - pi;
@@ -1598,6 +1635,9 @@
               '<div class="nm">' +
                 (n.capital ? "★ " : "") +
                 esc(n.name) +
+                (state.phase === "draft" && !edit && isUnclaimed(n)
+                  ? " · " + n.maps.length + (n.maps.length === 1 ? " map" : " maps")
+                  : "") +
                 '</div><div class="pips">' +
                 pips +
                 "</div>",
@@ -1997,7 +2037,11 @@
         let h = "";
         if (!sel)
           h =
-            '<div class="hint">Nothing selected. Click a planet to set who holds its maps, or a fleet to move it.</div>';
+            state.phase === "draft" && !edit
+              ? '<div class="hint">Click a pulsing planet to claim it.<br><br><b style="color:var(--or)">Planets are not equal:</b> each has a different number of maps, shown under its name. More maps means more income every turn, but more battles to take it or to lose it.' +
+                (state.draftCapitals ? " Your first single-map pick becomes your capital." : "") +
+                "</div>"
+              : '<div class="hint">Nothing selected. Click a planet to set who holds its maps, or a fleet to move it.</div>';
         else if (sel.kind === "node") {
           const n = nodeById(sel.id);
           if (!n) {
@@ -2025,9 +2069,12 @@
               "></div></div>" +
               '<div class="row"><label>Capital</label><input type="checkbox" data-f="capital"' +
               (n.capital ? " checked" : "") +
-              '><span style="color:var(--dim);font-size:11px">+' +
-              state.rules.capitalBonus +
-              "/turn to whoever holds every map</span></div>" +
+              (canBeCapital(n) ? "" : " disabled") +
+              '><span style="color:var(--dim);font-size:11px">' +
+              (canBeCapital(n)
+                ? "+" + state.rules.capitalBonus + "/turn to whoever holds it"
+                : "Only a planet with exactly one map can be a capital") +
+              "</span></div>" +
               '<h2 style="margin-top:10px">Maps · holder · battle result</h2>';
             n.maps.forEach((m, i) => {
               h +=
@@ -2240,15 +2287,15 @@
           opt("mode", "draft", "Pick in turns") +
           '</div><div class="hint">' +
           (modal.mode === "draft"
-            ? "Commanders take turns clicking an unclaimed planet until none are left."
-            : "Planets are shuffled and dealt out one at a time.") +
+            ? "Commanders take turns clicking an unclaimed planet until none are left. Planets have different numbers of maps, so they are not worth the same."
+            : "Planets are dealt at random so both commanders get the same number of maps, not the same number of planets.") +
           '</div><div class="mlabel">Goes first</div><div class="grid3">' +
           opt("first", "0", state.players[0].name) +
           opt("first", "1", state.players[1].name) +
           opt("first", "random", "Random") +
           '</div><label class="row" style="margin-top:12px"><input type="checkbox" data-f="ngcap"' +
           (modal.capitals ? " checked" : "") +
-          "> The first planet each commander gets is their capital</label>" +
+          "> Give each commander a capital (always a single-map planet)</label>" +
           '<div class="hint">Everyone starts with ' +
           state.rules.startCredits +
           " credits. Ownership, fleets and the turn counter are cleared; the board layout stays.</div>" +
@@ -2353,7 +2400,11 @@
             if (n) battle(n, +a, +c);
             break;
           case "addmap":
-            if (n) mutate(() => n.maps.push({ name: "Map " + (n.maps.length + 1), owner: -1 }));
+            if (n)
+              mutate(() => {
+                n.maps.push({ name: "Map " + (n.maps.length + 1), owner: -1 });
+                if (!canBeCapital(n)) n.capital = false;
+              });
             break;
           case "delmap":
             if (n) mutate(() => n.maps.splice(+a, 1));
@@ -2430,7 +2481,7 @@
           else if (f === "type" && n) n.type = t.value;
           else if (f === "size" && n) n.size = +t.value;
           else if (f === "ring" && n) n.ring = t.checked;
-          else if (f === "capital" && n) n.capital = t.checked;
+          else if (f === "capital" && n) n.capital = t.checked && canBeCapital(n);
           else if (f === "map" && n) n.maps[+i].name = t.value;
           else if (f === "value") {
             const l = state.lanes.find((x) => x.id === sel.id);
