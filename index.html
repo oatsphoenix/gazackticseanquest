@@ -416,7 +416,7 @@
       }
     </style>
   </head>
-  <body class="edit">
+  <body class="play">
     <canvas id="c"></canvas>
     <div id="labels"></div>
 
@@ -653,7 +653,7 @@
       } catch (e) {
         state = defaultState();
       }
-      let edit = true,
+      let edit = false,
         tool = "select",
         sel = null,
         laneStart = null;
@@ -736,9 +736,14 @@
         log(p.name + " bought " + what + (cost ? " (−" + cost + ")" : " (free)"));
         return true;
       }
+      // In play mode a commander can only act on their own turn. Edit mode is the override.
+      const offTurn = (pi) => !edit && pi !== state.current;
+      const turnToast = () => toast("It is " + state.players[state.current].name + "'s turn");
       function buy(pi, what) {
         const p = state.players[pi],
           r = state.rules;
+        // Last stand stays open off-turn: it answers a planet lost during the other commander's attack.
+        if (what !== "stand" && offTurn(pi)) return turnToast();
         if (what === "fleet") {
           let at = sel && sel.kind === "node" ? nodeById(sel.id) : null;
           if (!at) at = state.nodes.find((n) => n.kind === "planet" && n.capital && fullOwner(n) === pi);
@@ -1325,7 +1330,7 @@
         fleetObjs.clear();
         labelRoot.innerHTML = "";
         const selFleet = sel && sel.kind === "fleet" ? state.fleets.find((f) => f.id === sel.id) : null;
-        const reach = selFleet ? neighbours(selFleet.node) : [];
+        const reach = selFleet && !offTurn(selFleet.owner) ? neighbours(selFleet.node) : [];
 
         for (const l of state.lanes) {
           const a = nodeById(l.a),
@@ -1475,15 +1480,16 @@
             new THREE.Mesh(
               geo,
               new THREE.MeshStandardMaterial({
-                color: 0xdfe6ee,
+                color: col,
                 emissive: col,
-                emissiveIntensity: 0.85,
+                emissiveIntensity: 0.9,
                 roughness: 0.5,
                 flatShading: true,
               }),
             ),
           );
-          g.add(glowSprite(on ? 0xffffff : col, on ? 1.5 : 0.9, on ? 0.9 : 0.6));
+          g.add(glowSprite(col, on ? 1.6 : 1.0, on ? 0.95 : 0.7));
+          if (on) g.add(reticle(0.42));
           const hb = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), basic(0xffffff, 0, false));
           hb.userData = { kind: "fleet", id: f.id };
           g.add(hb);
@@ -1496,6 +1502,11 @@
           if (fleetPos.has(f.id)) g.position.copy(fleetPos.get(f.id));
         }
         for (const id of [...fleetPos.keys()]) if (!fleetObjs.has(id)) fleetPos.delete(id);
+        // Rebuilt objects have no world position until the next rendered frame; a click landing
+        // before that frame would miss everything, so place them now.
+        updateFleets(performance.now() / 1000, 0);
+        board.updateMatrixWorld(true);
+        fleetLayer.updateMatrixWorld(true);
       }
 
       const tmpV = new THREE.Vector3(),
@@ -1728,8 +1739,9 @@
         }
         const f = sel && sel.kind === "fleet" ? state.fleets.find((x) => x.id === sel.id) : null;
         if (f && hit && hit.kind === "node" && hit.id !== f.node) {
-          if (neighbours(f.node).includes(hit.id)) return moveFleet(f, nodeById(hit.id));
-          toast("No lane from here to there");
+          if (offTurn(f.owner)) turnToast();
+          else if (neighbours(f.node).includes(hit.id)) return moveFleet(f, nodeById(hit.id));
+          else toast("No lane from here to there");
         }
         sel = hit ? { kind: hit.kind, id: hit.id } : null;
         commit();
@@ -1899,7 +1911,11 @@
             " fleet @ " +
             esc(nodeById(f.node).name) +
             "</div>" +
-            '<div class="hint">Click a pulsing node to move along a lane.</div>' +
+            '<div class="hint">' +
+            (offTurn(f.owner)
+              ? "This fleet can move on " + esc(p.name) + "'s turn."
+              : "Click a pulsing node to move along a lane.") +
+            "</div>" +
             '<div class="row edit-only"><label>Place at</label><select data-f="fleetnode">' +
             state.nodes
               .map(
@@ -1925,7 +1941,8 @@
         const r = state.rules;
         $("players").innerHTML = state.players
           .map((p, i) => {
-            const fl = fleetsOf(i);
+            const fl = fleetsOf(i),
+              off = offTurn(i) ? " disabled" : "";
             return (
               '<div class="pl' +
               (state.current === i ? " cur" : "") +
@@ -1974,22 +1991,30 @@
               " / turn</div>" +
               '<div class="grid"><button class="btn" data-act="buy:' +
               i +
-              ':fleet" title="Deploys at the selected node, or at their capital">Fleet ' +
+              ':fleet" title="Deploys at the selected node, or at their capital"' +
+              off +
+              ">Fleet " +
               fleetCost(i) +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':hero">Hero ' +
+              ':hero"' +
+              off +
+              ">Hero " +
               r.hero +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':move" title="Price doubles with each one bought this turn">Move pt ' +
+              ':move" title="Price doubles with each one bought this turn"' +
+              off +
+              ">Move pt " +
               moveCost(i) +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':faction">Faction ' +
+              ':faction"' +
+              off +
+              ">Faction " +
               r.factionPick +
               "</button>" +
               '<button class="btn" data-act="buy:' +
