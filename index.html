@@ -396,6 +396,40 @@
       #toast.show {
         opacity: 1;
       }
+      #modal {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 4, 12, 0.66);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 50;
+      }
+      #modal.show {
+        display: flex;
+      }
+      #modalBox {
+        position: relative;
+        width: 440px;
+        max-width: 92vw;
+        padding: 18px;
+      }
+      #modalBox .mtext {
+        font-size: 15px;
+        margin: 4px 0 16px;
+      }
+      #modalBox .mlabel {
+        color: var(--dim);
+        text-transform: uppercase;
+        font-size: 10px;
+        margin: 12px 0 5px;
+      }
+      #modalBox .btn {
+        padding: 8px;
+      }
+      #modalBox .go {
+        margin-top: 16px;
+      }
       #err {
         display: none;
         position: fixed;
@@ -492,6 +526,7 @@
 
     <div id="log" class="panel"></div>
     <div id="toast"></div>
+    <div id="modal"><div id="modalBox" class="panel"></div></div>
     <div id="err"></div>
 
     <script src="three.js"></script>
@@ -524,6 +559,7 @@
         ["moveBase", "1st move pt (doubles)", 100],
         ["factionPick", "Faction pick", 300],
         ["lastStand", "Last stand", 300],
+        ["startCredits", "Starting credits", 100],
       ];
 
       function defaultState() {
@@ -571,16 +607,24 @@
           current: 0,
           ply: 0,
           era: null,
+          phase: "play",
           players: [
             {
               name: "Zack",
               faction: "Republic",
               color: "#3aa0ff",
-              credits: 0,
+              credits: 100,
               movesBought: 0,
               lastStandAt: null,
             },
-            { name: "Sean", faction: "CIS", color: "#ff4a3a", credits: 0, movesBought: 0, lastStandAt: null },
+            {
+              name: "Sean",
+              faction: "CIS",
+              color: "#ff4a3a",
+              credits: 100,
+              movesBought: 0,
+              lastStandAt: null,
+            },
           ],
           rules: Object.fromEntries(RULES.map((r) => [r[0], r[2]])),
           nodes: [
@@ -644,15 +688,20 @@
         s.turn = +s.turn || 1;
         s.current = s.current === 1 ? 1 : 0;
         s.ply = +s.ply || 0;
+        s.phase = s.phase === "draft" ? "draft" : "play";
         return s;
       }
 
       let state;
+      let fresh = false; // no saved game: open on the new-game menu
       try {
         state = normalize(JSON.parse(localStorage.getItem(KEY)));
       } catch (e) {
         state = defaultState();
+        fresh = true;
       }
+      let placing = null, // commander index while choosing where a new fleet deploys
+        modal = null; // open dialog: { kind: "confirm" | "newgame", ... }
       let edit = false,
         tool = "select",
         sel = null,
@@ -682,6 +731,28 @@
         return n <= 1 ? 0 : state.rules.fleetBase * 2 ** (n - 2);
       };
       const moveCost = (pi) => state.rules.moveBase * 2 ** state.players[pi].movesBought;
+      const isUnclaimed = (n) => n.kind === "planet" && n.maps.length > 0 && n.maps.every((m) => m.owner < 0);
+      const laneBetween = (a, b) =>
+        state.lanes.find((l) => (l.a === a && l.b === b) || (l.b === a && l.a === b));
+      const lanePoints = (l) => Math.max(0, Math.round(l.value));
+      // Credits to cross a lane: one move point per point of lane value, each dearer than the last.
+      function moveCostVia(pi, lane) {
+        let c = 0;
+        for (let k = 0; k < lanePoints(lane); k++)
+          c += state.rules.moveBase * 2 ** (state.players[pi].movesBought + k);
+        return c;
+      }
+      // Edit mode moves are free corrections; in play the commander must afford the lane.
+      const canReach = (f, id) => {
+        const l = laneBetween(f.node, id);
+        return !!l && (edit || moveCostVia(f.owner, l) <= state.players[f.owner].credits);
+      };
+      // Where a new fleet may deploy: a planet the commander holds a map on (any planet if they hold none).
+      function fleetSpots(pi) {
+        if (edit) return state.nodes;
+        const own = state.nodes.filter((n) => n.kind === "planet" && n.maps.some((m) => m.owner === pi));
+        return own.length ? own : state.nodes.filter((n) => n.kind === "planet");
+      }
 
       function save() {
         try {
@@ -713,6 +784,7 @@
         state = JSON.parse(undoStack.pop());
         sel = null;
         laneStart = null;
+        placing = null;
         commit();
       }
       let toastT;
@@ -743,20 +815,18 @@
         const p = state.players[pi],
           r = state.rules;
         // Last stand stays open off-turn: it answers a planet lost during the other commander's attack.
+        if (state.phase === "draft") return toast("Finish picking planets first");
         if (what !== "stand" && offTurn(pi)) return turnToast();
         if (what === "fleet") {
-          let at = sel && sel.kind === "node" ? nodeById(sel.id) : null;
-          if (!at) at = state.nodes.find((n) => n.kind === "planet" && n.capital && fullOwner(n) === pi);
-          if (!at) return toast("Select the planet to deploy the fleet at");
-          if (!spend(pi, fleetCost(pi), "a fleet at " + at.name)) return;
-          const f = { id: uid("f"), owner: pi, node: at.id };
-          state.fleets.push(f);
-          sel = { kind: "fleet", id: f.id };
+          if (placing === pi) placing = null;
+          else if (fleetCost(pi) > p.credits) return toast(p.name + " needs " + fleetCost(pi) + " credits");
+          else {
+            placing = pi;
+            sel = null;
+          }
+          return commit();
         } else if (what === "hero") {
           if (!spend(pi, r.hero, "a hero")) return;
-        } else if (what === "move") {
-          if (!spend(pi, moveCost(pi), "a move point")) return;
-          p.movesBought++;
         } else if (what === "faction") {
           if (!spend(pi, r.factionPick, "a faction pick")) return;
         } else if (what === "stand") {
@@ -764,6 +834,29 @@
           p.lastStandAt = state.ply;
         }
         commit();
+      }
+      function confirmFleet(pi, node) {
+        const p = state.players[pi],
+          cost = fleetCost(pi);
+        modal = {
+          kind: "confirm",
+          text:
+            "Deploy " +
+            p.name +
+            "'s fleet at " +
+            node.name +
+            (cost ? " for " + cost + " credits?" : " for free?"),
+          onYes: () => {
+            placing = null;
+            if (spend(pi, fleetCost(pi), "a fleet at " + node.name)) {
+              const f = { id: uid("f"), owner: pi, node: node.id };
+              state.fleets.push(f);
+              sel = { kind: "fleet", id: f.id };
+            }
+            commit();
+          },
+        };
+        renderModal();
       }
       function battle(node, mapIdx, winner) {
         mutate(() => {
@@ -781,6 +874,8 @@
         });
       }
       function endTurn() {
+        if (state.phase === "draft") return toast("Finish picking planets first");
+        placing = null;
         mutate(() => {
           const pi = state.current,
             p = state.players[pi],
@@ -811,20 +906,80 @@
         });
       }
       function moveFleet(f, to) {
+        const lane = laneBetween(f.node, to.id),
+          p = state.players[f.owner],
+          cost = edit ? 0 : moveCostVia(f.owner, lane);
+        if (cost > p.credits) return toast("Moving there costs " + cost + " credits");
         mutate(() => {
-          const from = nodeById(f.node),
-            lane = state.lanes.find(
-              (l) => (l.a === f.node && l.b === to.id) || (l.b === f.node && l.a === to.id),
-            );
+          const from = nodeById(f.node);
           f.node = to.id;
-          log(
-            state.players[f.owner].name +
-              " fleet: " +
-              from.name +
-              " → " +
-              to.name +
-              (lane && lane.value !== 1 ? " (lane value " + lane.value + ")" : ""),
-          );
+          if (!edit) {
+            p.credits -= cost;
+            p.movesBought += lanePoints(lane);
+          }
+          log(p.name + " fleet: " + from.name + " → " + to.name + (edit ? "" : " (−" + cost + ")"));
+        });
+      }
+
+      // ── new game: planets dealt at random, or picked in turns
+      function startNewGame(o) {
+        edit = false;
+        placing = null;
+        mutate(() => {
+          const first = o.first === "random" ? (Math.random() < 0.5 ? 0 : 1) : +o.first;
+          state.nodes.forEach((n) => {
+            (n.maps || []).forEach((m) => (m.owner = -1));
+            if (o.capitals && n.kind === "planet") n.capital = false;
+          });
+          state.players.forEach((p) => {
+            p.credits = state.rules.startCredits;
+            p.movesBought = 0;
+            p.lastStandAt = null;
+          });
+          Object.assign(state, {
+            fleets: [],
+            turn: 1,
+            ply: 0,
+            era: null,
+            current: first,
+            firstPlayer: first,
+            log: [],
+          });
+          state.draftCapitals = !!o.capitals;
+          sel = null;
+          const planets = state.nodes.filter(isUnclaimed),
+            names = state.players.map((p) => p.name);
+          if (o.mode === "draft" && planets.length) {
+            state.phase = "draft";
+            log("New game: planets are picked in turns. " + names[first] + " picks first.");
+          } else {
+            for (let i = planets.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [planets[i], planets[j]] = [planets[j], planets[i]];
+            }
+            planets.forEach((n, i) => {
+              n.maps.forEach((m) => (m.owner = (first + i) % 2));
+              if (o.capitals && i < 2) n.capital = true;
+            });
+            state.phase = "play";
+            log("New game: planets dealt at random. " + names[first] + " moves first.");
+          }
+        });
+      }
+      function draftPick(n) {
+        mutate(() => {
+          const pi = state.current,
+            p = state.players[pi];
+          n.maps.forEach((m) => (m.owner = pi));
+          if (state.draftCapitals && !state.nodes.some((x) => x !== n && x.capital && fullOwner(x) === pi))
+            n.capital = true;
+          log(p.name + " picked " + n.name + (n.capital ? " as their capital" : ""));
+          if (state.nodes.some(isUnclaimed)) state.current = 1 - pi;
+          else {
+            state.phase = "play";
+            state.current = state.firstPlayer === 1 ? 1 : 0;
+            log("All planets picked. " + state.players[state.current].name + " moves first.");
+          }
         });
       }
       function deleteThing(t) {
@@ -1330,7 +1485,14 @@
         fleetObjs.clear();
         labelRoot.innerHTML = "";
         const selFleet = sel && sel.kind === "fleet" ? state.fleets.find((f) => f.id === sel.id) : null;
-        const reach = selFleet && !offTurn(selFleet.owner) ? neighbours(selFleet.node) : [];
+        const glow = new Set(); // nodes that pulse: fleet moves, fleet deploy spots, planets left in the draft
+        if (placing !== null) fleetSpots(placing).forEach((n) => glow.add(n.id));
+        else if (state.phase === "draft" && !edit)
+          state.nodes.filter(isUnclaimed).forEach((n) => glow.add(n.id));
+        else if (selFleet && !offTurn(selFleet.owner))
+          neighbours(selFleet.node)
+            .filter((id) => canReach(selFleet, id))
+            .forEach((id) => glow.add(id));
 
         for (const l of state.lanes) {
           const a = nodeById(l.a),
@@ -1458,7 +1620,7 @@
             if (on) g.add(reticle(0.5));
             if (n.name && n.name !== "Open space") addLabel("sp", esc(n.name), n.x, n.z, 0.45);
           }
-          if (reach.includes(n.id) || laneStart === n.id) {
+          if (glow.has(n.id) || laneStart === n.id) {
             const pr = flat(
               new THREE.RingGeometry(R + 0.55, R + 0.68, 48),
               basic(laneStart === n.id ? 0xffb648 : 0x9dffb0, 0.9, true),
@@ -1685,6 +1847,13 @@
       );
 
       function click(hit, e) {
+        if (placing !== null) {
+          if (hit && hit.kind === "node" && fleetSpots(placing).some((n) => n.id === hit.id))
+            return confirmFleet(placing, nodeById(hit.id));
+          return toast("Pick a pulsing planet for the new fleet");
+        }
+        if (state.phase === "draft" && !edit && hit && hit.kind === "node" && isUnclaimed(nodeById(hit.id)))
+          return draftPick(nodeById(hit.id));
         if (edit && (tool === "planet" || tool === "space")) {
           const p = groundPoint(e);
           if (!p) return;
@@ -1912,9 +2081,17 @@
             esc(nodeById(f.node).name) +
             "</div>" +
             '<div class="hint">' +
-            (offTurn(f.owner)
-              ? "This fleet can move on " + esc(p.name) + "'s turn."
-              : "Click a pulsing node to move along a lane.") +
+            (edit
+              ? "Click a pulsing node to move it. Moves are free in edit mode."
+              : state.phase === "draft"
+                ? "Fleets move once every planet is picked."
+                : offTurn(f.owner)
+                  ? "This fleet can move on " + esc(p.name) + "'s turn."
+                  : neighbours(f.node).some((id) => canReach(f, id))
+                    ? "Click a pulsing node to move. The next move point costs " +
+                      moveCost(f.owner) +
+                      " credits."
+                    : "Not enough credits to move: the next move point costs " + moveCost(f.owner) + ".") +
             "</div>" +
             '<div class="row edit-only"><label>Place at</label><select data-f="fleetnode">' +
             state.nodes
@@ -1943,7 +2120,8 @@
           .map((p, i) => {
             const fl = fleetsOf(i),
               // greyed out when it is not their turn or they cannot afford it
-              off = (cost, turnLocked) => ((turnLocked && offTurn(i)) || cost > p.credits ? " disabled" : "");
+              off = (cost, turnLocked) =>
+                state.phase === "draft" || (turnLocked && offTurn(i)) || cost > p.credits ? " disabled" : "";
             return (
               '<div class="pl' +
               (state.current === i ? " cur" : "") +
@@ -1989,13 +2167,17 @@
               fl.length +
               " fleets · +" +
               income(i) +
-              " / turn</div>" +
-              '<div class="grid"><button class="btn" data-act="buy:' +
+              " / turn<br>next move point " +
+              moveCost(i) +
+              "</div>" +
+              '<div class="grid"><button class="btn' +
+              (placing === i ? " on" : "") +
+              '" data-act="buy:' +
               i +
-              ':fleet" title="Deploys at the selected node, or at their capital"' +
-              off(fleetCost(i), true) +
-              ">Fleet " +
-              fleetCost(i) +
+              ':fleet" title="Then click the planet to deploy at"' +
+              (placing === i ? "" : off(fleetCost(i), true)) +
+              ">" +
+              (placing === i ? "Cancel fleet" : "Fleet " + fleetCost(i)) +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
@@ -2006,13 +2188,6 @@
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':move" title="Price doubles with each one bought this turn"' +
-              off(moveCost(i), true) +
-              ">Move pt " +
-              moveCost(i) +
-              "</button>" +
-              '<button class="btn" data-act="buy:' +
-              i +
               ':faction"' +
               off(r.factionPick, true) +
               ">Faction " +
@@ -2020,7 +2195,7 @@
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
-              ':stand" style="grid-column:span 2"' +
+              ':stand"' +
               off(r.lastStand, false) +
               ">Last stand " +
               r.lastStand +
@@ -2032,21 +2207,76 @@
           .join("");
       }
 
+      function renderModal() {
+        $("modal").classList.toggle("show", !!modal);
+        if (!modal) return;
+        if (modal.kind === "confirm") {
+          $("modalBox").innerHTML =
+            "<h2>Are you sure?</h2>" +
+            '<div class="mtext">' +
+            esc(modal.text) +
+            "</div>" +
+            '<div class="grid"><button class="btn on" data-act="modal-yes">Yes</button><button class="btn" data-act="modal-no">No</button></div>';
+          return;
+        }
+        const opt = (key, val, label) =>
+          '<button class="btn' +
+          (String(modal[key]) === val ? " on" : "") +
+          '" data-act="ng:' +
+          key +
+          ":" +
+          val +
+          '">' +
+          esc(label) +
+          "</button>";
+        $("modalBox").innerHTML =
+          "<h2>New game</h2>" +
+          '<div class="mlabel">How planets are handed out</div><div class="grid">' +
+          opt("mode", "random", "Random") +
+          opt("mode", "draft", "Pick in turns") +
+          '</div><div class="hint">' +
+          (modal.mode === "draft"
+            ? "Commanders take turns clicking an unclaimed planet until none are left."
+            : "Planets are shuffled and dealt out one at a time.") +
+          '</div><div class="mlabel">Goes first</div><div class="grid3">' +
+          opt("first", "0", state.players[0].name) +
+          opt("first", "1", state.players[1].name) +
+          opt("first", "random", "Random") +
+          '</div><label class="row" style="margin-top:12px"><input type="checkbox" data-f="ngcap"' +
+          (modal.capitals ? " checked" : "") +
+          "> The first planet each commander gets is their capital</label>" +
+          '<div class="hint">Everyone starts with ' +
+          state.rules.startCredits +
+          " credits. Ownership, fleets and the turn counter are cleared; the board layout stays.</div>" +
+          '<div class="grid go"><button class="btn on" data-act="ng-start">Start</button><button class="btn" data-act="modal-no">Cancel</button></div>';
+      }
+      const openNewGame = () => {
+        modal = { kind: "newgame", mode: "random", first: "random", capitals: true };
+        renderModal();
+      };
+
       function renderUI() {
         document.body.className = edit ? "edit" : "play";
         $("modeBtn").textContent = edit ? "Edit mode" : "Play mode";
         $("modeBtn").classList.toggle("on", edit);
         const p = state.players[state.current];
-        $("turn").innerHTML =
-          "Turn <b>" +
-          state.turn +
-          '</b><span class="dot" style="background:' +
+        const who =
+          '<span class="dot" style="background:' +
           p.color +
           '"></span><b style="color:' +
           p.color +
           '">' +
           esc(p.name) +
-          "</b> to move" +
+          "</b>";
+        $("turn").innerHTML =
+          (state.phase === "draft"
+            ? "Planet draft" + who + " picks a planet (" + state.nodes.filter(isUnclaimed).length + " left)"
+            : "Turn <b>" + state.turn + "</b>" + who + " to move") +
+          (placing !== null
+            ? " &nbsp;·&nbsp; click a pulsing planet to deploy " +
+              esc(state.players[placing].name) +
+              "'s fleet"
+            : "") +
           (state.era ? " &nbsp;·&nbsp; Era roll <b>" + state.era.die + "</b> " + esc(state.era.era) : "");
         document
           .querySelectorAll("#tools .btn")
@@ -2059,6 +2289,7 @@
         });
         renderSelection();
         renderPlayers();
+        renderModal();
         $("log").innerHTML = state.log.map((l) => "<div>" + esc(l) + "</div>").join("");
       }
 
@@ -2085,6 +2316,7 @@
             commit();
             break;
           case "mode":
+            placing = null;
             edit = !edit;
             tool = "select";
             laneStart = null;
@@ -2147,27 +2379,27 @@
             $("file").click();
             break;
           case "newgame":
-            if (confirm("Clear ownership, fleets, credits and the turn counter? The board stays."))
-              mutate(() => {
-                const d = defaultState();
-                state.nodes.forEach((x) =>
-                  (x.maps || []).forEach((m) => {
-                    m.owner = -1;
-                  }),
-                );
-                state.players.forEach((p) => {
-                  p.credits = 0;
-                  p.movesBought = 0;
-                  p.lastStandAt = null;
-                });
-                state.fleets = [];
-                state.turn = 1;
-                state.current = 0;
-                state.ply = 0;
-                state.era = null;
-                state.log = d.log;
-                sel = null;
-              });
+            openNewGame();
+            break;
+          case "ng":
+            modal[a] = c;
+            renderModal();
+            break;
+          case "ng-start": {
+            const o = modal;
+            modal = null;
+            startNewGame(o);
+            break;
+          }
+          case "modal-yes": {
+            const yes = modal.onYes;
+            modal = null;
+            yes();
+            break;
+          }
+          case "modal-no":
+            modal = null;
+            renderModal();
             break;
           case "reset":
             if (confirm("Restore the default board? This discards every edit."))
@@ -2183,6 +2415,10 @@
         const t = e.target,
           f = t.dataset.f;
         if (!f) return;
+        if (f === "ngcap") {
+          modal.capitals = t.checked;
+          return;
+        }
         const i = t.dataset.i,
           n = sel && sel.kind === "node" ? nodeById(sel.id) : null;
         mutate(() => {
@@ -2235,6 +2471,8 @@
           e.preventDefault();
           undo();
         } else if (e.key === "Escape") {
+          placing = null;
+          modal = null;
           sel = null;
           laneStart = null;
           tool = "select";
@@ -2244,6 +2482,7 @@
 
       resize();
       syncScene();
+      if (fresh) openNewGame();
       renderUI();
       requestAnimationFrame(frame);
     </script>
