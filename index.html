@@ -153,16 +153,49 @@
         padding: 10px;
       }
       #log {
-        bottom: 10px;
+        bottom: 0;
         left: 282px;
         right: 364px;
-        height: 92px;
-        overflow: auto;
-        padding: 6px 10px;
+        height: 28px;
+        overflow: hidden;
+        border-bottom: 0;
         font-size: 11px;
         color: var(--dim);
+        transition: height 0.25s ease;
       }
-      #log div:first-child {
+      #log.open {
+        height: 240px;
+      }
+      #logTab {
+        height: 28px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 10px;
+        cursor: pointer;
+        color: var(--or);
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+      }
+      #logTab:hover {
+        background: rgba(57, 197, 255, 0.12);
+      }
+      #logTab .last {
+        flex: 1;
+        color: var(--txt);
+        text-transform: none;
+        letter-spacing: 0.04em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      #logBody {
+        height: calc(100% - 28px);
+        overflow: auto;
+        padding: 4px 10px 8px;
+        border-top: 1px solid var(--line);
+      }
+      #logBody div:first-child {
         color: var(--txt);
       }
       h2 {
@@ -304,6 +337,46 @@
         align-items: baseline;
         gap: 6px;
         text-transform: uppercase;
+      }
+      .pl .hd {
+        cursor: pointer;
+      }
+      .pl .hd > span:not(.rt) {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .pl .hd {
+        white-space: nowrap;
+      }
+      .pl .hd .rt {
+        flex: none;
+        margin-left: auto;
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .pl .hd .rt .tag {
+        margin-left: 0;
+      }
+      .pl .hd .mini {
+        color: var(--or);
+        font-size: 14px;
+      }
+      .pl .hd .chev {
+        color: var(--dim);
+        font-size: 10px;
+      }
+      .pl:not(.min) .hd {
+        margin-bottom: 4px;
+      }
+      .pl:not(.min) .mini,
+      .pl.min .bd {
+        display: none;
+      }
+      .pl.min {
+        padding-top: 5px;
+        padding-bottom: 5px;
       }
       .pl .hd b {
         font-size: 15px;
@@ -525,7 +598,12 @@
       </details>
     </aside>
 
-    <div id="log" class="panel"></div>
+    <div id="log" class="panel">
+      <div id="logTab" data-act="logtoggle" title="Pull the log up or down">
+        <span>Log</span><span class="last"></span><span class="arrow">▲</span>
+      </div>
+      <div id="logBody"></div>
+    </div>
     <div id="toast"></div>
     <div id="modal"><div id="modalBox" class="panel"></div></div>
     <div id="err"></div>
@@ -703,6 +781,7 @@
         state = defaultState();
         fresh = true;
       }
+      let logOpen = false; // the log is a tab at the bottom edge until pulled up
       let placing = null, // commander index while choosing where a new fleet deploys
         modal = null; // open dialog: { kind: "confirm" | "newgame", ... }
       let edit = false,
@@ -771,6 +850,7 @@
       }
       function commit() {
         save();
+        aimCamera();
         syncScene();
         renderUI();
       }
@@ -1040,6 +1120,29 @@
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
       const cam = { target: new THREE.Vector3(0, 0, 0), r: 25, theta: 0, phi: 0.82 };
+      // cam is where the camera is now; goal is where it is easing to. Manual orbit/pan moves both.
+      const goal = { target: cam.target.clone(), r: cam.r, theta: cam.theta, phi: cam.phi };
+      let home = null, // the view to return to once nothing is selected
+        focusedId = null;
+      function aimCamera() {
+        const n = !edit && sel && sel.kind === "node" ? nodeById(sel.id) : null;
+        if (n) {
+          if (focusedId === n.id) return;
+          if (!home) home = { target: goal.target.clone(), r: goal.r, theta: goal.theta, phi: goal.phi };
+          focusedId = n.id;
+          goal.target.set(n.x, 0, n.z);
+          goal.r = Math.min(home.r, 10.5 + nodeR(n) * 4);
+          goal.phi = 1.04; // lower, more side-on than the overview
+          goal.theta = home.theta + clamp(-n.x * 0.045, -0.42, 0.42); // swing a little toward its side of the board
+        } else if (home) {
+          goal.target.copy(home.target);
+          goal.r = home.r;
+          goal.theta = home.theta;
+          goal.phi = home.phi;
+          home = null;
+          focusedId = null;
+        }
+      }
       scene.add(new THREE.AmbientLight(0x7f95bb, 0.75));
       const sun = new THREE.DirectionalLight(0xffffff, 2.6);
       sun.position.set(-9, 11, 7);
@@ -1772,6 +1875,11 @@
         const t = now / 1000,
           dt = Math.min(0.1, (now - last) / 1000);
         last = now;
+        const ease = 1 - Math.exp(-dt * 3.2);
+        cam.target.lerp(goal.target, ease);
+        cam.r += (goal.r - cam.r) * ease;
+        cam.theta += (goal.theta - cam.theta) * ease;
+        cam.phi += (goal.phi - cam.phi) * ease;
         const sp = Math.sin(cam.phi);
         camera.position.set(
           cam.target.x + cam.r * sp * Math.sin(cam.theta),
@@ -1851,13 +1959,19 @@
         drag.moved = true;
         if (drag.mode === "orbit") {
           cam.theta -= dx * 0.005;
+          goal.theta -= dx * 0.005;
+          goal.phi = clamp(goal.phi - dy * 0.005, 0.12, 1.5);
           cam.phi = clamp(cam.phi - dy * 0.005, 0.12, 1.5);
         } else if (drag.mode === "pan") {
           const s = cam.r * 0.0016,
             c = Math.cos(cam.theta),
             sn = Math.sin(cam.theta);
-          cam.target.x += (-c * dx - sn * dy) * s;
-          cam.target.z += (sn * dx - c * dy) * s;
+          const px = (-c * dx - sn * dy) * s,
+            pz = (sn * dx - c * dy) * s;
+          cam.target.x += px;
+          cam.target.z += pz;
+          goal.target.x += px;
+          goal.target.z += pz;
         } else {
           const p = groundPoint(e),
             n = nodeById(drag.hit.id);
@@ -1883,7 +1997,7 @@
         "wheel",
         (e) => {
           e.preventDefault();
-          cam.r = clamp(cam.r * Math.exp(e.deltaY * 0.001), 5, 75);
+          goal.r = clamp(goal.r * Math.exp(e.deltaY * 0.001), 5, 75);
         },
         { passive: false },
       );
@@ -2163,7 +2277,17 @@
         $("sel").innerHTML = h;
       }
 
+      // A card is open when it is that commander's turn (both are open in edit mode). Clicking a
+      // header overrides that until the turn passes.
+      let cardOverride = [null, null],
+        cardTurnKey = "";
+      const cardIsOpen = (i) => (cardOverride[i] !== null ? cardOverride[i] : edit || state.current === i);
       function renderPlayers() {
+        const key = state.ply + ":" + state.current + ":" + state.phase + ":" + edit;
+        if (key !== cardTurnKey) {
+          cardTurnKey = key;
+          cardOverride = [null, null];
+        }
         const r = state.rules;
         $("players").innerHTML = state.players
           .map((p, i) => {
@@ -2174,19 +2298,28 @@
             return (
               '<div class="pl' +
               (state.current === i ? " cur" : "") +
+              (cardIsOpen(i) ? "" : " min") +
               '" style="--pc:' +
               p.color +
-              '"><div class="hd"><b>' +
+              '"><div class="hd" data-act="card:' +
+              i +
+              '" title="Click to ' +
+              (cardIsOpen(i) ? "fold" : "open") +
+              ' this commander"><b>' +
               esc(p.name) +
               "</b><span>" +
               esc(p.faction) +
-              "</span>" +
+              '</span><span class="rt">' +
               (p.lastStandAt !== null
                 ? '<span class="tag" title="Last stand called: their next turn is used up">Last stand</span>'
                 : state.current === i
                   ? '<span class="tag">Turn</span>'
                   : "") +
-              "</div>" +
+              '<span class="mini">' +
+              p.credits +
+              ' cr</span><span class="chev">' +
+              (cardIsOpen(i) ? "▲" : "▼") +
+              '</span></span></div><div class="bd">' +
               '<div class="edit-only"><div class="row"><label>Name</label><input data-f="pname" data-i="' +
               i +
               '" value="' +
@@ -2252,7 +2385,7 @@
               r.lastStand +
               "</button></div>" +
               (fl.length ? '<div style="margin-top:6px">' + fleetRows(fl, true) + "</div>" : "") +
-              "</div>"
+              "</div></div>"
             );
           })
           .join("");
@@ -2341,7 +2474,10 @@
         renderSelection();
         renderPlayers();
         renderModal();
-        $("log").innerHTML = state.log.map((l) => "<div>" + esc(l) + "</div>").join("");
+        $("log").classList.toggle("open", logOpen);
+        $("logBody").innerHTML = state.log.map((l) => "<div>" + esc(l) + "</div>").join("");
+        document.querySelector("#logTab .last").textContent = logOpen ? "" : state.log[0] || "";
+        document.querySelector("#logTab .arrow").textContent = logOpen ? "▼" : "▲";
       }
 
       $("rules").innerHTML = RULES.map(
@@ -2372,6 +2508,14 @@
             tool = "select";
             laneStart = null;
             commit();
+            break;
+          case "card":
+            cardOverride[+a] = !cardIsOpen(+a);
+            renderPlayers();
+            break;
+          case "logtoggle":
+            logOpen = !logOpen;
+            renderUI();
             break;
           case "undo":
             undo();
