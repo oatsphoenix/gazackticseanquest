@@ -672,12 +672,37 @@
         ["battleWin", "Battle: winner", 300],
         ["battleLoss", "Battle: loser", 100],
         ["fleetBase", "2nd fleet (doubles)", 500],
-        ["hero", "Hero", 400],
+        ["hero", "Bonus: Leader (hero)", 400],
         ["moveBase", "1st move pt (doubles)", 100],
         ["factionPick", "Faction pick", 300],
         ["lastStand", "Last stand", 300],
         ["startCredits", "Starting credits", 100],
+        ["b_energy", "Bonus: Energy Boost", 100],
+        ["b_supplies", "Bonus: Supplies", 100],
+        ["b_garrison", "Bonus: Garrison", 100],
+        ["b_bacta", "Bonus: Bacta Tanks", 200],
+        ["b_turrets", "Bonus: Auto Turrets", 200],
+        ["b_shielding", "Bonus: Combat Shielding", 300],
+        ["b_blasters", "Bonus: Enhanced Blasters", 300],
+        ["b_sabotage", "Bonus: Sabotage", 300],
       ];
+
+      // The Galactic Conquest bonuses: key, name, what it does, and whether it works in space battles.
+      // The name is exactly what the game's Fake Console calls it ("Bonus 1 <name>" / "Bonus 2 <name>").
+      // Default prices are the stock game's halved, matching the house price of 400 for a hero (stock 800).
+      const BONUSES = [
+        ["energy", "Energy Boost", "Your units' energy recharges faster.", false],
+        ["supplies", "Supplies", "Your units carry extra ammunition.", false],
+        ["garrison", "Garrison", "Extra reinforcements for your side.", false],
+        ["bacta", "Bacta Tanks", "Your units slowly regain health.", true],
+        ["turrets", "Auto Turrets", "Automatic turrets defend your positions.", true],
+        ["shielding", "Combat Shielding", "Your units have more health.", true],
+        ["blasters", "Enhanced Blasters", "Your blasters do more damage.", false],
+        ["sabotage", "Sabotage", "Enemy vehicles start damaged.", true],
+        ["leader", "Leader", "Unlocks your side's hero.", false],
+      ];
+      const bonusCost = (key) => (key === "leader" ? state.rules.hero : state.rules["b_" + key]);
+      const bonusesHeld = (p) => BONUSES.reduce((t, b) => t + (p.bonuses[b[0]] || 0), 0);
 
       // Which faction each commander plays depends on the era of the battle.
       const FACTIONS = { c: ["Republic", "CIS"], g: ["Rebels", "Empire"] };
@@ -794,6 +819,7 @@
               credits: 100,
               movesBought: 0,
               lastStandAt: null,
+              bonuses: Object.fromEntries(BONUSES.map((b) => [b[0], 0])),
             },
             {
               name: "Sean",
@@ -802,6 +828,7 @@
               credits: 100,
               movesBought: 0,
               lastStandAt: null,
+              bonuses: Object.fromEntries(BONUSES.map((b) => [b[0], 0])),
             },
           ],
           rules: Object.fromEntries(RULES.map((r) => [r[0], r[2]])),
@@ -838,7 +865,12 @@
           p.faction = String(p.faction || "");
           if (!/^#[0-9a-f]{6}$/i.test(p.color)) p.color = d.players[i].color;
           p.credits = Math.max(0, +p.credits || 0);
-          p.heroes = Math.max(0, Math.floor(+p.heroes || 0)); // heroes bought and not yet used in a battle
+          // bonuses bought and not yet used in a battle, by key (older saves kept heroes separately)
+          const had = p.bonuses || {};
+          if (p.heroes) had.leader = (had.leader || 0) + p.heroes;
+          delete p.heroes;
+          p.bonuses = {};
+          BONUSES.forEach((b) => (p.bonuses[b[0]] = Math.max(0, Math.floor(+had[b[0]] || 0))));
           p.movesBought = +p.movesBought || 0;
           if (p.lastStandAt === undefined) p.lastStandAt = null;
         });
@@ -883,7 +915,14 @@
             die: +b.die || 0,
             mode: String(b.mode || "con"),
             space: String(b.space || ""),
-            hero: [!!(b.hero && b.hero[0]), !!(b.hero && b.hero[1])],
+            use: [0, 1].map((i) => {
+              const picked = {},
+                from = (b.use && b.use[i]) || {};
+              BONUSES.forEach((x) => {
+                if (from[x[0]]) picked[x[0]] = true;
+              });
+              return picked;
+            }),
           };
         return s;
       }
@@ -1033,15 +1072,23 @@
             sel = null;
           }
           return commit();
-        } else if (what === "hero") {
-          if (!spend(pi, r.hero, "a hero")) return;
-          p.heroes++;
         } else if (what === "faction") {
           if (!spend(pi, r.factionPick, "a faction pick")) return;
         } else if (what === "stand") {
           if (!spend(pi, r.lastStand, "a LAST STAND — it uses their next turn")) return;
           p.lastStandAt = state.ply;
         }
+        commit();
+      }
+      function buyBonus(pi, key) {
+        const p = state.players[pi],
+          bonus = BONUSES.find((b) => b[0] === key);
+        if (!bonus) return;
+        if (state.phase === "draft") return toast("Finish picking planets first");
+        if (!edit && !mySeat(pi)) return toast("You are not playing " + p.name);
+        if (offTurn(pi)) return turnToast();
+        if (!spend(pi, bonusCost(key), "the " + bonus[1] + " bonus")) return;
+        p.bonuses[key]++;
         commit();
       }
       function confirmFleet(pi, node) {
@@ -1083,7 +1130,10 @@
           const b = state.battle;
           if (b && b.node === node.id && b.map === mapIdx) {
             state.players.forEach((p, i) => {
-              if (b.hero[i] && p.heroes > 0) p.heroes--;
+              // every bonus fielded in this battle is used up
+              Object.keys(b.use[i]).forEach((key) => {
+                if (p.bonuses[key] > 0) p.bonuses[key]--;
+              });
             });
             state.battle = null;
           }
@@ -1126,7 +1176,7 @@
             die: 0,
             mode: "con",
             space: "",
-            hero: [false, false],
+            use: [{}, {}],
           });
           const eras = battleEras(nb);
           if (eras.length === 1) setBattleEra(nb, eras, 0);
@@ -1209,7 +1259,7 @@
           });
           state.players.forEach((p) => {
             p.credits = state.rules.startCredits;
-            p.heroes = 0;
+            BONUSES.forEach((b) => (p.bonuses[b[0]] = 0));
             p.movesBought = 0;
             p.lastStandAt = null;
           });
@@ -2556,7 +2606,9 @@
               income(i) +
               " / turn<br>next move point " +
               moveCost(i) +
-              (p.heroes ? " · " + p.heroes + (p.heroes === 1 ? " hero" : " heroes") + " in hand" : "") +
+              (bonusesHeld(p)
+                ? " · " + bonusesHeld(p) + (bonusesHeld(p) === 1 ? " bonus" : " bonuses") + " in hand"
+                : "") +
               "</div>" +
               '<div class="grid"><button class="btn' +
               (placing === i ? " on" : "") +
@@ -2567,12 +2619,10 @@
               ">" +
               (placing === i ? "Cancel fleet" : "Fleet " + fleetCost(i)) +
               "</button>" +
-              '<button class="btn" data-act="buy:' +
+              '<button class="btn" data-act="shop:' +
               i +
-              ':hero"' +
-              off(r.hero, true) +
-              ">Hero " +
-              r.hero +
+              '" title="Buy bonuses to use in battles">Bonuses' +
+              (bonusesHeld(p) ? " (" + bonusesHeld(p) + ")" : "") +
               "</button>" +
               '<button class="btn" data-act="buy:' +
               i +
@@ -2907,6 +2957,48 @@
         $("modalBox").innerHTML = h;
       }
 
+      // The bonus shop for one commander.
+      function renderShopModal() {
+        const i = modal.pi,
+          p = state.players[i],
+          locked = state.phase === "draft" || (!edit && !mySeat(i)) || offTurn(i);
+        $("modalBox").innerHTML =
+          '<h2>Bonuses · <span style="color:' +
+          p.color +
+          '">' +
+          esc(p.name) +
+          "</span> · " +
+          p.credits +
+          " credits</h2>" +
+          '<div class="hint" style="min-height:0;margin:0 0 8px">A bonus is held until you field it on a battle card, and is used up by that battle.' +
+          (locked ? " " + esc(p.name) + " can only buy on their own turn." : "") +
+          "</div>" +
+          BONUSES.map((x) => {
+            const cost = bonusCost(x[0]);
+            return (
+              '<div class="row"><b style="flex:0 0 150px">' +
+              x[1] +
+              '</b><span style="flex:1;color:var(--dim);font-size:11px">' +
+              x[2] +
+              (x[3] ? "" : " Not in space.") +
+              "</span>" +
+              '<span style="flex:0 0 22px;text-align:right;color:var(--or)">' +
+              (p.bonuses[x[0]] ? "×" + p.bonuses[x[0]] : "") +
+              "</span>" +
+              '<button class="btn" style="flex:0 0 78px" data-act="buybonus:' +
+              i +
+              ":" +
+              x[0] +
+              '"' +
+              (locked || cost > p.credits ? " disabled" : "") +
+              ">Buy " +
+              cost +
+              "</button></div>"
+            );
+          }).join("") +
+          '<div class="grid go"><span></span><button class="btn" data-act="modal-no">Close</button></div>';
+      }
+
       // The battle card: everything both players need to start the right match, and the result buttons.
       function renderBattleModal() {
         const b = state.battle;
@@ -2989,15 +3081,34 @@
               "</b><span>" +
               sideOf(i, b.era) +
               "</span>" +
-              (p.heroes > 0
-                ? '<label style="flex:1;text-align:right;color:var(--txt);text-transform:none;font-size:12px"><input type="checkbox" data-f="bhero" data-i="' +
+              "</div>";
+            // the bonuses this commander holds: click to field them in this battle
+            const chipsHtml = BONUSES.filter((x) => p.bonuses[x[0]] > 0)
+              .map((x) => {
+                const blocked = b.map < 0 && !x[3];
+                return (
+                  '<button class="chip b' +
+                  (b.use[i][x[0]] ? " on" : "") +
+                  '" style="--pc:' +
+                  p.color +
+                  '" data-act="buse:' +
                   i +
+                  ":" +
+                  x[0] +
                   '"' +
-                  (b.hero[i] ? " checked" : "") +
-                  "> fields a hero (" +
-                  p.heroes +
-                  " in hand)</label>"
-                : "") +
+                  (blocked
+                    ? ' disabled title="Does nothing in a space battle"'
+                    : ' title="' + esc(x[2]) + '"') +
+                  ">" +
+                  x[1] +
+                  (p.bonuses[x[0]] > 1 ? " ×" + p.bonuses[x[0]] : "") +
+                  "</button>"
+                );
+              })
+              .join("");
+            h +=
+              '<div class="row" style="flex-wrap:wrap;margin:-2px 0 8px 16px"><span style="color:var(--dim);font-size:10px;text-transform:uppercase">Bonuses</span>' +
+              (chipsHtml || '<span style="color:var(--dim);font-size:11px">none in hand</span>') +
               "</div>";
           });
           h +=
@@ -3014,9 +3125,23 @@
           (mission ? "" : " disabled") +
           ">Copy mission code</button></div>";
         if (b.era) {
+          // one checklist line per commander who is fielding bonuses, in the Fake Console's own wording
           const fielded = state.players
-            .map((p, i) => (b.hero[i] ? p.name + " (" + sideOf(i, b.era) + ")" : null))
-            .filter(Boolean);
+            .map((p, i) => {
+              const names = BONUSES.filter((x) => b.use[i][x[0]] && p.bonuses[x[0]] > 0).map(
+                (x) => "<b>Bonus # " + x[1] + "</b>",
+              );
+              return names.length
+                ? "<li>" +
+                    esc(p.name) +
+                    " (" +
+                    sideOf(i, b.era) +
+                    "): pause, open Fake Console, and use " +
+                    names.join(", ") +
+                    ".</li>"
+                : "";
+            })
+            .join("");
           h +=
             '<div class="mlabel">In the game</div><ol>' +
             "<li>One player hosts <b>" +
@@ -3033,11 +3158,8 @@
             "<li>At the spawn screen " +
             state.players.map((p, i) => esc(p.name) + " picks <b>" + sideOf(i, b.era) + "</b>").join(", ") +
             ".</li>" +
-            (fielded.length
-              ? "<li>Hero for " +
-                esc(fielded.join(" and ")) +
-                ": pause, open Fake Console, and use <b>Bonus 1 Leader</b> or <b>Bonus 2 Leader</b>, whichever number is that faction's team on this map.</li>"
-              : "") +
+            fielded +
+            (fielded ? "<li># is 1 or 2: the number of that faction's team on this map.</li>" : "") +
             "</ol>";
         }
         h +=
@@ -3063,9 +3185,10 @@
       function renderModal() {
         $("modal").classList.toggle("show", !!modal);
         if (!modal) return;
-        $("modalBox").classList.toggle("wide", modal.kind === "battle");
+        $("modalBox").classList.toggle("wide", modal.kind === "battle" || modal.kind === "shop");
         if (modal.kind === "online") return renderOnlineModal();
         if (modal.kind === "battle") return renderBattleModal();
+        if (modal.kind === "shop") return renderShopModal();
         if (modal.kind === "confirm") {
           $("modalBox").innerHTML =
             "<h2>Are you sure?</h2>" +
@@ -3223,6 +3346,22 @@
           case "battleopen":
             if (n) startBattle(n, +a);
             break;
+          case "shop":
+            modal = { kind: "shop", pi: +a };
+            renderModal();
+            break;
+          case "buybonus":
+            buyBonus(+a, c);
+            break;
+          case "buse":
+            if (online() && !edit && !mySeat(+a)) toast("You are not playing " + state.players[+a].name);
+            else
+              mutate(() => {
+                const use = state.battle.use[+a];
+                if (use[c]) delete use[c];
+                else use[c] = true;
+              });
+            break;
           case "battleshow":
             modal = { kind: "battle" };
             renderModal();
@@ -3373,7 +3512,6 @@
           } else if (f === "maperas" && n) n.maps[+i].eras = t.value;
           else if (f === "bmode" && state.battle) state.battle.mode = t.value;
           else if (f === "bspace" && state.battle) state.battle.space = t.value;
-          else if (f === "bhero" && state.battle) state.battle.hero[+i] = t.checked;
           else if (f === "value") {
             const l = state.lanes.find((x) => x.id === sel.id);
             if (l) l.value = +t.value || 0;
