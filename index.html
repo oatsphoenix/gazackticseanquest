@@ -1239,7 +1239,11 @@
           modal = { kind: "battle" };
           return renderModal();
         }
-        if (b) return toast("Finish or cancel the battle at " + nodeById(b.node).name + " first");
+        if (b) {
+          // Another battle is still open. Show it, and say so, with a one-click way to move on.
+          modal = { kind: "battle", wanted: { node: node.id, map: mapIdx } };
+          return renderModal();
+        }
         if (state.phase === "draft") return toast("Finish picking planets first");
         if (!edit && !mySeat(state.current)) return turnToast();
         mutate(() => {
@@ -3131,7 +3135,20 @@
           ">" +
           ERA_NAMES[e] +
           "</button>";
-        let h =
+        const battleName = (node, mapIdx) =>
+          node.name + (mapIdx >= 0 ? ": " + node.maps[mapIdx].name : " (space)");
+        let h = "";
+        const wn = modal.wanted && nodeById(modal.wanted.node);
+        if (wn && (wn.kind !== "planet" || wn.maps[modal.wanted.map]))
+          h +=
+            '<div style="border:1px solid var(--or);padding:8px 10px;margin-bottom:12px"><b style="color:var(--or)">This is not ' +
+            esc(battleName(wn, modal.wanted.map)) +
+            ".</b> A battle is still open at <b>" +
+            esc(battleName(n, b.map)) +
+            '</b>. Record who won it below, or drop it:<div class="grid" style="margin-top:8px"><button class="btn on" data-act="bswitch">Drop it and start ' +
+            esc(battleName(wn, modal.wanted.map)) +
+            "</button><span></span></div></div>";
+        h +=
           "<h2>Battle · " +
           esc(n.name) +
           (m ? ": " + esc(m.name) : " (space)") +
@@ -3402,6 +3419,11 @@
         if (!battleKey && modal && modal.kind === "battle") modal = null;
         shownBattle = battleKey;
         $("battleBtn").hidden = !battleKey;
+        if (battleKey) {
+          const bn = nodeById(state.battle.node);
+          $("battleBtn").textContent =
+            "Battle: " + bn.name + (state.battle.map >= 0 ? " · " + bn.maps[state.battle.map].name : "");
+        }
         $("netBtn").textContent = online() ? netLabel() : "Play online";
         $("netBtn").classList.toggle("on", net.status === "connected");
         $("netBtn").classList.toggle("warn", net.status === "lost" || net.status === "error");
@@ -3515,6 +3537,16 @@
           case "bwin":
             if (state.battle) battle(nodeById(state.battle.node), state.battle.map, +a);
             break;
+          case "bswitch": {
+            const want = modal.wanted,
+              wantNode = want && nodeById(want.node);
+            mutate(() => {
+              log("Battle at " + nodeById(state.battle.node).name + " dropped");
+              state.battle = null;
+            });
+            if (wantNode) startBattle(wantNode, want.map);
+            break;
+          }
           case "bcancel":
             mutate(() => {
               log("Battle at " + nodeById(state.battle.node).name + " cancelled");
