@@ -163,51 +163,150 @@ function Get-SteamLibraryPaths([string]$VdfText) {
     return $paths
 }
 
-function Find-GameData {
-    $candidates = @()
-    foreach ($key in @('HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'HKLM:\SOFTWARE\Valve\Steam', 'HKCU:\Software\Valve\Steam')) {
+# Every folder Steam is installed in, according to the registry.
+function Get-SteamRoots {
+    $roots = @()
+    foreach ($key in @('HKCU:\Software\Valve\Steam', 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam', 'HKLM:\SOFTWARE\Valve\Steam')) {
         try {
             $props = Get-ItemProperty -Path $key -ErrorAction Stop
-            foreach ($name in @('InstallPath', 'SteamPath')) {
-                $steam = $props.$name
-                if (-not $steam) { continue }
-                $libs = @($steam)
-                $vdf = [IO.Path]::Combine($steam, 'steamapps\libraryfolders.vdf')
-                if (Test-Path -LiteralPath $vdf) { $libs += Get-SteamLibraryPaths (Get-Content -LiteralPath $vdf -Raw) }
-                foreach ($lib in $libs) { $candidates += [IO.Path]::Combine($lib, 'steamapps\common\Star Wars Battlefront II\GameData') }
+            foreach ($name in @('SteamPath', 'InstallPath')) {
+                if ($props.$name) { $roots += ("$($props.$name)" -replace '/', '\').TrimEnd('\') }
             }
         } catch { }
     }
+    return (Select-UniquePaths $roots)
+}
+
+# Windows paths ignore case, so "C:\Steam" and "c:\steam" are the same folder.
+function Select-UniquePaths($Paths) {
+    $seen = @{}; $out = @()
+    foreach ($p in @($Paths)) {
+        if (-not $p) { continue }
+        $k = "$p".TrimEnd('\').ToLowerInvariant()
+        if (-not $seen.ContainsKey($k)) { $seen[$k] = $true; $out += "$p".TrimEnd('\') }
+    }
+    return $out
+}
+
+# Every Steam library on this PC: Steam's own folder plus the ones listed in its library files.
+function Get-SteamLibraries {
+    $libs = @()
+    foreach ($root in @(Get-SteamRoots)) {
+        $libs += $root
+        foreach ($vdf in @('steamapps\libraryfolders.vdf', 'config\libraryfolders.vdf')) {
+            try {
+                $file = [IO.Path]::Combine($root, $vdf)
+                if (Test-Path -LiteralPath $file) { $libs += Get-SteamLibraryPaths (Get-Content -LiteralPath $file -Raw) }
+            } catch { }
+        }
+    }
+    return (Select-UniquePaths $libs)
+}
+
+# Looks for the game, most reliable source first. What it checked is kept in $script:SearchNotes so a
+# failed search can say why.
+function Find-GameData {
+    $script:SearchNotes = @()
+    $script:SteamHasGame = $false
+    $candidates = @()
+
+    # 1. Windows' own record of where Steam installed the game (Steam app 6060).
+    foreach ($key in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 6060', 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Steam App 6060')) {
+        try {
+            $loc = (Get-ItemProperty -Path $key -ErrorAction Stop).InstallLocation
+            if ($loc) { $candidates += [IO.Path]::Combine($loc, 'GameData'); $script:SearchNotes += "Windows lists the game at: $loc" }
+        } catch { }
+    }
+
+    # 2. Each Steam library. The library's manifest for app 6060 names the game's folder.
+    $libs = @(Get-SteamLibraries)
+    if ($libs.Count) { $script:SearchNotes += "Steam libraries: $($libs -join '; ')" } else { $script:SearchNotes += 'No Steam installation found in the registry.' }
+    foreach ($lib in $libs) {
+        $folders = @('Star Wars Battlefront II')
+        try {
+            $manifest = [IO.Path]::Combine($lib, 'steamapps\appmanifest_6060.acf')
+            if (Test-Path -LiteralPath $manifest) {
+                $script:SteamHasGame = $true
+                $script:SearchNotes += "Steam lists the game in library: $lib"
+                $m = [regex]::Match((Get-Content -LiteralPath $manifest -Raw), '"installdir"\s+"([^"]+)"')
+                if ($m.Success) { $folders = @($m.Groups[1].Value) + $folders }
+            }
+        } catch { }
+        foreach ($folder in $folders) { $candidates += [IO.Path]::Combine($lib, 'steamapps\common', $folder, 'GameData') }
+    }
+
+    # 3. GOG's record.
     try {
         foreach ($game in Get-ChildItem 'HKLM:\SOFTWARE\WOW6432Node\GOG.com\Games' -ErrorAction Stop) {
             $props = Get-ItemProperty -Path $game.PSPath
             if ("$($props.gameName)" -match 'Battlefront.*II' -and $props.path) { $candidates += [IO.Path]::Combine($props.path, 'GameData') }
         }
     } catch { }
+
+    # 4. The usual places on each drive.
     $drives = @()
-    try { $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' } | ForEach-Object { $_.Name.TrimEnd('\') }) } catch { }
+    try { $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' -and $_.IsReady } | ForEach-Object { $_.Name.TrimEnd('\') }) } catch { }
     if (-not $drives.Count) { $drives = @('C:') }
     foreach ($drive in $drives) {
-        $candidates += "$drive\Program Files (x86)\Steam\steamapps\common\Star Wars Battlefront II\GameData"
-        $candidates += "$drive\SteamLibrary\steamapps\common\Star Wars Battlefront II\GameData"
+        foreach ($tail in @('Program Files (x86)\Steam', 'Program Files\Steam', 'SteamLibrary', 'Steam', 'Games\Steam', 'Games\SteamLibrary')) {
+            $candidates += "$drive\$tail\steamapps\common\Star Wars Battlefront II\GameData"
+        }
         $candidates += "$drive\GOG Games\Star Wars Battlefront II\GameData"
         $candidates += "$drive\Program Files (x86)\GOG Galaxy\Games\Star Wars Battlefront II\GameData"
-        $candidates += "$drive\Steam\steamapps\common\Star Wars Battlefront II\GameData"
-        $candidates += "$drive\Games\Steam\steamapps\common\Star Wars Battlefront II\GameData"
     }
-    foreach ($c in ($candidates | Select-Object -Unique)) { if (Test-GameData $c) { return $c } }
+    foreach ($c in @(Select-UniquePaths $candidates)) { if (Test-GameData $c) { return $c } }
+
+    # 5. Last resort: look through the drives for any Steam library holding the game.
+    Write-Info 'Not in the usual places. Searching the drives for it (this can take a minute)...'
+    foreach ($drive in $drives) {
+        $tops = @()
+        try { $tops = @(Get-ChildItem -LiteralPath "$drive\" -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin @('Windows', '$Recycle.Bin', 'System Volume Information', 'ProgramData', 'Recovery', '$WinREAgent') }) } catch { }
+        foreach ($top in $tops) {
+            $found = $null
+            try {
+                $steamapps = @($top) + @(Get-ChildItem -LiteralPath $top.FullName -Directory -Recurse -Depth 2 -Force -ErrorAction SilentlyContinue) | Where-Object { $_.Name -eq 'steamapps' }
+                foreach ($sa in @($steamapps)) {
+                    $common = [IO.Path]::Combine($sa.FullName, 'common')
+                    if (-not (Test-Path -LiteralPath $common)) { continue }
+                    foreach ($game in @(Get-ChildItem -LiteralPath $common -Directory -ErrorAction SilentlyContinue)) {
+                        $gd = [IO.Path]::Combine($game.FullName, 'GameData')
+                        if ((Test-GameData $gd) -and $gd -notmatch 'Classic Collection') { $found = $gd; break }
+                    }
+                    if ($found) { break }
+                }
+            } catch { }
+            if ($found) { return $found }
+        }
+    }
+    $script:SearchNotes += "Drives searched: $($drives -join ', ')"
     return $null
 }
 
+# Asked only when the search above finds nothing.
 function Select-GameDataFolder {
-    Write-Info 'Could not find the game automatically. Pick the GameData folder (it contains BattlefrontII.exe).'
+    Write-Warn 'Could not find Battlefront II (2005) on this PC.'
+    foreach ($note in @($script:SearchNotes)) { Write-Info $note }
+    if (-not $script:SteamHasGame -and @(Get-SteamRoots).Count) {
+        Write-Info 'Steam does not list the game as installed on this PC.'
+        if (Read-YesNo 'Open Steam to install it now? (Run this again once it has finished.)') {
+            try { Start-Process 'steam://install/6060' } catch { }
+            exit 0
+        }
+    }
+    Write-Info 'If it is installed somewhere unusual, pick its GameData folder (the one containing BattlefrontII.exe).'
     try {
         Add-Type -AssemblyName System.Windows.Forms
+        # an invisible always-on-top owner keeps the picker from opening behind this window
+        $owner = New-Object System.Windows.Forms.Form
+        $owner.TopMost = $true
         $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
         $dialog.Description = 'Select the Battlefront II GameData folder (contains BattlefrontII.exe)'
-        if ($dialog.ShowDialog() -eq 'OK') { return $dialog.SelectedPath }
+        $dialog.ShowNewFolderButton = $false
+        $result = $dialog.ShowDialog($owner)
+        $owner.Dispose()
+        if ($result -eq 'OK') { return $dialog.SelectedPath }
     } catch { }
-    return (Read-Host '   Paste the full path to the GameData folder').Trim('"', ' ')
+    return (Read-Host '   Or paste the full path to the GameData folder').Trim('"', ' ')
 }
 
 function Test-WriteAccess([string]$Dir) {
