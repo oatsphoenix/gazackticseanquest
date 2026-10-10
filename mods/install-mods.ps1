@@ -96,6 +96,8 @@ $SetListUrl  = 'https://oatsphoenix.github.io/gazackticseanquest/mods/setlist.js
 #   NameLike / MinMB / MaxMB  what the downloaded file should look like (a mismatch asks first)
 #   Sha256                    exact checksum of the pinned download
 #   Contains                  things that must be inside the archive
+#   Rejects                   things that prove the archive is a different mod (never installed)
+#   Replaces                  for Kind lvl: the game files this mod replaces, and nothing else
 #   Markers                   things that must be in GameData afterwards
 # -----------------------------------------------------------------------------------------------
 $Mods = @(
@@ -117,6 +119,7 @@ $Mods = @(
     @{ Key = 'bf1-maps'; Name = "Marvel4's Conversion Pack 1.1"; Default = $true; Source = 'moddb'; Kind = 'addon'
        What = '13 Battlefront 1 maps, including every BF1 map on the Seanquest board.'
        NameLike = 'marvel|conversion'; MinMB = 20; MaxMB = 5000; Contains = @('addme.script')
+       Rejects = @('DLC_XBOX', 'UPDATE_XBOX')
        Url  = 'https://www.moddb.com/downloads/marvel4s-conversion-pack-11' }
     @{ Key = 'xbox-dlc'; Name = 'Xbox DLC and Title Update content for PC'; Default = $true; Source = 'moddb'; Kind = 'addon'
        What = 'Bespin Cloud City, Rhen Var Citadel and Harbor, Yavin 4 Arena, Kit Fisto, Asajj Ventress.'
@@ -125,6 +128,7 @@ $Mods = @(
     @{ Key = 'ai'; Name = 'AI Difficulty mod 2.0'; Default = $true; Source = 'moddb'; Kind = 'lvl'
        What = 'Elite AI on the stock maps (replaces mission.lvl). If stock maps misbehave afterwards: install-launcher.bat -Undo ai'
        NameLike = 'difficult|(^|[^a-z])ai([^a-z]|$)'; MaxMB = 300; Contains = @('mission.lvl')
+       Replaces = @('mission.lvl'); Rejects = @('addme.script', 'DLC_XBOX', 'UPDATE_XBOX')
        Url  = 'https://www.moddb.com/games/star-wars-battlefront-ii/downloads/ai-difficulty-mod' }
     @{ Key = 'shader-patch'; Name = 'Shader Patch (PrismaticFlower)'; Default = $true; Source = 'github'; Kind = 'overlay-root'
        What = 'Modern renderer: fixed water, better lighting, HUD scaling.'
@@ -486,6 +490,17 @@ function Get-MissingContents($Mod, [string]$Dir) {
 }
 
 function Test-ModContents($Mod, [string]$Dir) {
+    # Things this mod never contains. Finding one means the archive is a different mod, and
+    # installing it as this one would put its files in the wrong place. No override for this.
+    if (@($Mod.Rejects).Count) {
+        $probe = @{ Contains = $Mod.Rejects }
+        $absent = @(Get-MissingContents $probe $Dir)
+        $present = @($Mod.Rejects | Where-Object { $_ -and ($absent -notcontains $_) })
+        if ($present.Count) {
+            Write-Warn "This is not $($Mod.Name): the archive contains $($present -join ', '), which belongs to a different mod. Nothing was installed."
+            return $false
+        }
+    }
     $missing = @(Get-MissingContents $Mod $Dir)
     if (-not $missing.Count) {
         if (@($Mod.Contains).Count) { Write-Ok 'Archive contents are what this mod should contain.' }
@@ -539,7 +554,10 @@ function Get-AddonOwner([string]$Name) {
 
 # Takes a mod back out: restores every original it replaced and deletes the files it added.
 function Undo-Mod($Mod, $Record, [string]$GameData, [string]$BackupDir) {
-    $files = @(@($Record.Files) | Where-Object { $_ })
+    # Each file once. A mod that wrote the same file several times lists it several times, and
+    # handling it twice would restore the original and then delete it.
+    $seen = @{}
+    $files = @(@($Record.Files) | Where-Object { $_ -and -not $seen.ContainsKey("$_".ToLowerInvariant()) } | ForEach-Object { $seen["$_".ToLowerInvariant()] = $true; $_ })
     if (-not $files.Count) {
         Write-Warn "$($Mod.Name) was put in by its own installer, so this script cannot take it out."
         Write-Warn 'Use Steam > game Properties > Installed Files > Verify integrity of game files.'
@@ -564,6 +582,9 @@ function Undo-Mod($Mod, $Record, [string]$GameData, [string]$BackupDir) {
             Remove-Item -LiteralPath $dir -Recurse -Force
         }
     }
+    # Drop the installer's copy of the download too, so a wrong file is not picked up again.
+    $cached = Get-CachedDownload $Mod.Key
+    if ($cached) { Remove-Item -LiteralPath $cached, "$cached.sha256" -Force -ErrorAction SilentlyContinue }
     Write-Ok "$($Mod.Name) removed: $removed files deleted, $restored originals restored."
     return $true
 }
@@ -854,10 +875,20 @@ function Install-Mod($Mod, [string]$File, [string]$GameData, [string]$BackupDir)
         return $true
     }
     if ($Mod.Kind -eq 'lvl') {
-        # Replace only .lvl files the game already has, e.g. mission.lvl.
+        # Replace only the game files this mod is known to replace, and only when the archive holds
+        # exactly one of each: several copies would mean it is some other kind of mod.
         $lvlDir = Join-Path $GameData 'data/_lvl_pc'
         $done = 0
-        foreach ($lvl in Get-ChildItem -LiteralPath $extracted -Recurse -File -Filter '*.lvl') {
+        $picked = @()
+        foreach ($name in @($Mod.Replaces)) {
+            $found = @(Get-ChildItem -LiteralPath $extracted -Recurse -File | Where-Object { $_.Name -eq $name })
+            if ($found.Count -gt 1) {
+                Write-Warn "This archive has $($found.Count) files called $name, so it is not clear which one to use. Nothing was changed."
+                return $false
+            }
+            $picked += $found
+        }
+        foreach ($lvl in $picked) {
             $dest = Join-Path $lvlDir $lvl.Name
             if (-not (Test-Path -LiteralPath $dest)) { continue }
             $backup = Join-Path $BackupDir (Join-Path 'data/_lvl_pc' $lvl.Name)
@@ -1275,6 +1306,8 @@ function Invoke-Main {
         }
         Write-Step 'Verifying what is still installed'
         [void](Invoke-Verification $installed $gameData)
+        Write-Step 'Mission list'
+        [void](Send-MissionList $gameData)
         return
     }
 
