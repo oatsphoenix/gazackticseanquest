@@ -147,8 +147,11 @@ function Read-YesNo([string]$Question, [bool]$Default = $true) {
 # -----------------------------------------------------------------------------------------------
 # Finding the game
 # -----------------------------------------------------------------------------------------------
+# Paths here are built with [IO.Path]::Combine, not Join-Path: Join-Path stops the script when the
+# drive letter does not exist, and candidate folders are often on drives this PC does not have.
 function Test-GameData([string]$Path) {
-    return [bool]($Path -and (Test-Path -LiteralPath (Join-Path $Path 'BattlefrontII.exe')))
+    if (-not $Path) { return $false }
+    try { return [bool](Test-Path -LiteralPath ([IO.Path]::Combine($Path, 'BattlefrontII.exe')) -ErrorAction Stop) } catch { return $false }
 }
 
 # Steam keeps a list of every library folder in libraryfolders.vdf; each one may hold the game.
@@ -169,23 +172,28 @@ function Find-GameData {
                 $steam = $props.$name
                 if (-not $steam) { continue }
                 $libs = @($steam)
-                $vdf = Join-Path $steam 'steamapps\libraryfolders.vdf'
+                $vdf = [IO.Path]::Combine($steam, 'steamapps\libraryfolders.vdf')
                 if (Test-Path -LiteralPath $vdf) { $libs += Get-SteamLibraryPaths (Get-Content -LiteralPath $vdf -Raw) }
-                foreach ($lib in $libs) { $candidates += (Join-Path $lib 'steamapps\common\Star Wars Battlefront II\GameData') }
+                foreach ($lib in $libs) { $candidates += [IO.Path]::Combine($lib, 'steamapps\common\Star Wars Battlefront II\GameData') }
             }
         } catch { }
     }
     try {
         foreach ($game in Get-ChildItem 'HKLM:\SOFTWARE\WOW6432Node\GOG.com\Games' -ErrorAction Stop) {
             $props = Get-ItemProperty -Path $game.PSPath
-            if ("$($props.gameName)" -match 'Battlefront.*II' -and $props.path) { $candidates += (Join-Path $props.path 'GameData') }
+            if ("$($props.gameName)" -match 'Battlefront.*II' -and $props.path) { $candidates += [IO.Path]::Combine($props.path, 'GameData') }
         }
     } catch { }
-    foreach ($drive in @('C:', 'D:', 'E:', 'F:')) {
+    $drives = @()
+    try { $drives = @([IO.DriveInfo]::GetDrives() | Where-Object { $_.DriveType -eq 'Fixed' } | ForEach-Object { $_.Name.TrimEnd('\') }) } catch { }
+    if (-not $drives.Count) { $drives = @('C:') }
+    foreach ($drive in $drives) {
         $candidates += "$drive\Program Files (x86)\Steam\steamapps\common\Star Wars Battlefront II\GameData"
         $candidates += "$drive\SteamLibrary\steamapps\common\Star Wars Battlefront II\GameData"
         $candidates += "$drive\GOG Games\Star Wars Battlefront II\GameData"
         $candidates += "$drive\Program Files (x86)\GOG Galaxy\Games\Star Wars Battlefront II\GameData"
+        $candidates += "$drive\Steam\steamapps\common\Star Wars Battlefront II\GameData"
+        $candidates += "$drive\Games\Steam\steamapps\common\Star Wars Battlefront II\GameData"
     }
     foreach ($c in ($candidates | Select-Object -Unique)) { if (Test-GameData $c) { return $c } }
     return $null
