@@ -530,6 +530,14 @@
     <header id="top" class="panel">
       <h1>GAZACKTIC SEANQUEST</h1>
       <div id="turn"></div>
+      <button
+        class="btn"
+        id="netBtn"
+        data-act="online"
+        title="Play this board with the other commander over the internet"
+      >
+        Play online
+      </button>
       <button class="btn" data-act="newgame" title="Open the new-game menu">New game</button>
       <button
         class="btn"
@@ -609,6 +617,7 @@
     <div id="err"></div>
 
     <script src="three.js"></script>
+    <script src="peerjs.min.js"></script>
     <script>
       "use strict";
       window.addEventListener("error", (e) => {
@@ -849,6 +858,7 @@
         if (undoStack.length > 80) undoStack.shift();
       }
       function commit() {
+        netPublish();
         save();
         aimCamera();
         syncScene();
@@ -893,13 +903,20 @@
         return true;
       }
       // In play mode a commander can only act on their own turn. Edit mode is the override.
-      const offTurn = (pi) => !edit && pi !== state.current;
-      const turnToast = () => toast("It is " + state.players[state.current].name + "'s turn");
+      // Online, a player can also only act for the commander they are seated as.
+      const offTurn = (pi) => !edit && (pi !== state.current || !mySeat(pi));
+      const turnToast = () =>
+        toast(
+          !mySeat(state.current) && online()
+            ? "You are not playing " + state.players[state.current].name
+            : "It is " + state.players[state.current].name + "'s turn",
+        );
       function buy(pi, what) {
         const p = state.players[pi],
           r = state.rules;
         // Last stand stays open off-turn: it answers a planet lost during the other commander's attack.
         if (state.phase === "draft") return toast("Finish picking planets first");
+        if (!edit && !mySeat(pi)) return toast("You are not playing " + p.name);
         if (what !== "stand" && offTurn(pi)) return turnToast();
         if (what === "fleet") {
           if (placing === pi) placing = null;
@@ -959,6 +976,7 @@
       }
       function endTurn() {
         if (state.phase === "draft") return toast("Finish picking planets first");
+        if (!edit && !mySeat(state.current)) return turnToast();
         placing = null;
         mutate(() => {
           const pi = state.current,
@@ -2009,7 +2027,7 @@
           return toast("Pick a pulsing planet for the new fleet");
         }
         if (state.phase === "draft" && !edit && hit && hit.kind === "node" && isUnclaimed(nodeById(hit.id)))
-          return draftPick(nodeById(hit.id));
+          return mySeat(state.current) ? draftPick(nodeById(hit.id)) : turnToast();
         if (edit && (tool === "planet" || tool === "space")) {
           const p = groundPoint(e);
           if (!p) return;
@@ -2294,7 +2312,12 @@
             const fl = fleetsOf(i),
               // greyed out when it is not their turn or they cannot afford it
               off = (cost, turnLocked) =>
-                state.phase === "draft" || (turnLocked && offTurn(i)) || cost > p.credits ? " disabled" : "";
+                state.phase === "draft" ||
+                (!edit && !mySeat(i)) ||
+                (turnLocked && offTurn(i)) ||
+                cost > p.credits
+                  ? " disabled"
+                  : "";
             return (
               '<div class="pl' +
               (state.current === i ? " cur" : "") +
@@ -2391,9 +2414,322 @@
           .join("");
       }
 
+      // ───────────────────────────── online play (browser to browser) ─────────────────────────────
+      // One browser hosts and holds the real game; the other connects straight to it (WebRTC, through
+      // the PeerJS library). A public PeerJS server only introduces the two browsers to each other.
+      //   guest -> host : hello { want }            ask for a seat
+      //                   propose { base, state }   "I changed the game from revision <base> to this"
+      //   host  -> guest: welcome { seat, rev, state }
+      //                   state { rev, state, by, rejected }   the game after every accepted change
+      //   both ways     : ping
+      const ROOM_PREFIX = "gazackticseanquest-";
+      const net = {
+        role: null, // null (offline), "host" or "guest"
+        room: "",
+        seat: -1, // commander index this browser plays; -1 = watching only
+        peer: null,
+        conns: [], // host: one per connected browser; guest: the one link to the host
+        rev: 0, // revision number of the shared game
+        lastJson: "", // the game as last agreed with the other side
+        status: "off", // off | starting | waiting | connected | lost | error
+        note: "",
+        timer: null,
+      };
+      const online = () => net.role !== null;
+      const mySeat = (pi) => !online() || net.seat === pi;
+      const roomLink = (code) => location.origin + location.pathname + "?room=" + code;
+      const newRoomCode = () =>
+        Array.from(
+          { length: 6 },
+          () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)],
+        ).join("");
+
+      function netStatus(status, note) {
+        net.status = status;
+        net.note = note || "";
+        renderUI();
+      }
+      function netSend(conn, msg) {
+        try {
+          if (conn && conn.open) conn.send(msg);
+        } catch (e) {
+          /* the close handler deals with a dead link */
+        }
+      }
+      const netBroadcast = (msg) => net.conns.forEach((c) => netSend(c, msg));
+
+      // Called on every commit: if the game changed, tell the other side.
+      function netPublish() {
+        if (!online()) return;
+        const json = JSON.stringify(state);
+        if (json === net.lastJson) return;
+        if (net.role === "host") {
+          net.rev++;
+          net.lastJson = json;
+          netBroadcast({ t: "state", rev: net.rev, state, by: "host" });
+        } else if (net.status === "connected") {
+          net.lastJson = json; // shown at once; the host's reply confirms or replaces it
+          netSend(net.conns[0], { t: "propose", base: net.rev, state });
+        } else {
+          state = JSON.parse(net.lastJson);
+          toast("Not connected: that change was not made");
+        }
+      }
+      // Replace the local game with the shared one.
+      function netApply(remote, keepUndo) {
+        state = normalize(remote);
+        net.lastJson = JSON.stringify(state);
+        if (!keepUndo) undoStack.length = 0; // undo reaches back only to the other side's last action
+        placing = null;
+        if (modal && modal.kind === "confirm") modal = null;
+        if (sel && sel.kind === "node" && !nodeById(sel.id)) sel = null;
+        if (sel && sel.kind === "fleet" && !state.fleets.some((f) => f.id === sel.id)) sel = null;
+        if (sel && sel.kind === "lane" && !state.lanes.some((l) => l.id === sel.id)) sel = null;
+        save();
+        aimCamera();
+        syncScene();
+        renderUI();
+      }
+      function netStop(quiet) {
+        clearInterval(net.timer);
+        net.conns.forEach((c) => {
+          try {
+            c.close();
+          } catch (e) {}
+        });
+        if (net.peer)
+          try {
+            net.peer.destroy();
+          } catch (e) {}
+        Object.assign(net, {
+          role: null,
+          room: "",
+          seat: -1,
+          peer: null,
+          conns: [],
+          rev: 0,
+          lastJson: "",
+          status: "off",
+          note: "",
+          timer: null,
+        });
+        sessionStorage.removeItem("gzsq-host");
+        if (new URLSearchParams(location.search).get("room"))
+          history.replaceState(null, "", location.pathname);
+        if (!quiet) renderUI();
+      }
+      // A link that has been silent for 15 seconds is treated as dead; each side pings every 4.
+      function netHeartbeat() {
+        clearInterval(net.timer);
+        net.timer = setInterval(() => {
+          const now = Date.now();
+          net.conns.forEach((c) => {
+            netSend(c, { t: "ping" });
+            if (c.open && now - (c.seen || now) > 15000) c.close();
+          });
+        }, 4000);
+      }
+
+      function netHost(seat, room) {
+        if (typeof Peer === "undefined")
+          return toast("Online play could not load (peerjs.min.js is missing)");
+        netStop(true);
+        Object.assign(net, {
+          role: "host",
+          room: room || newRoomCode(),
+          seat,
+          lastJson: JSON.stringify(state),
+          rev: 1,
+        });
+        sessionStorage.setItem("gzsq-host", JSON.stringify({ room: net.room, seat }));
+        netStatus("starting", "Opening the room...");
+        const peer = (net.peer = new Peer(ROOM_PREFIX + net.room, { debug: 0 }));
+        peer.on("open", () => netStatus(net.conns.some((c) => c.open) ? "connected" : "waiting"));
+        peer.on("disconnected", () => {
+          // lost the introduction server only; anyone already connected stays connected
+          if (net.peer === peer && !peer.destroyed)
+            setTimeout(() => net.peer === peer && !peer.destroyed && peer.reconnect(), 3000);
+        });
+        peer.on("error", (err) => {
+          if (net.peer !== peer) return;
+          if (err.type === "unavailable-id") {
+            // the code is still held by this room's previous session (a reload); it frees up shortly
+            netStatus("starting", "Reopening the room...");
+            const code = net.room;
+            setTimeout(() => net.peer === peer && netHost(seat, code), 4000);
+          } else if (err.type !== "peer-unavailable")
+            netStatus(net.conns.some((c) => c.open) ? "connected" : "error", "Network problem: " + err.type);
+        });
+        peer.on("connection", (conn) => {
+          conn.on("open", () => {
+            conn.seen = Date.now();
+            net.conns.push(conn);
+          });
+          conn.on("data", (msg) => {
+            conn.seen = Date.now();
+            if (!msg || net.peer !== peer) return;
+            if (msg.t === "hello") {
+              // The first browser to ask gets the free commander; a browser coming back keeps its seat.
+              const other = 1 - net.seat,
+                taken = net.conns.some((c) => c !== conn && c.open && c.seat === other);
+              conn.seat = taken ? -1 : other;
+              netSend(conn, { t: "welcome", seat: conn.seat, rev: net.rev, state });
+              netStatus("connected");
+            } else if (msg.t === "propose") {
+              if (msg.base === net.rev && conn.seat >= 0) {
+                net.rev++;
+                netApply(msg.state);
+                netBroadcast({ t: "state", rev: net.rev, state, by: conn.peer });
+              } else netSend(conn, { t: "state", rev: net.rev, state, by: "host", rejected: true });
+            }
+          });
+          const gone = () => {
+            net.conns = net.conns.filter((c) => c !== conn);
+            if (net.peer === peer) netStatus(net.conns.some((c) => c.open) ? "connected" : "waiting");
+          };
+          conn.on("close", gone);
+          conn.on("error", gone);
+        });
+        netHeartbeat();
+      }
+
+      function netJoin(room) {
+        if (typeof Peer === "undefined")
+          return toast("Online play could not load (peerjs.min.js is missing)");
+        room = String(room || "")
+          .trim()
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, "");
+        if (!room) return toast("Type the room code first");
+        netStop(true);
+        Object.assign(net, { role: "guest", room, seat: -1, lastJson: JSON.stringify(state) });
+        history.replaceState(null, "", location.pathname + "?room=" + room); // so a reload rejoins
+        netStatus("starting", "Connecting...");
+        const peer = (net.peer = new Peer({ debug: 0 }));
+        let retry = null;
+        const dial = () => {
+          if (net.peer !== peer || peer.destroyed) return;
+          if (peer.disconnected) peer.reconnect();
+          const conn = peer.connect(ROOM_PREFIX + room, { reliable: true });
+          const lost = () => {
+            if (net.peer !== peer) return;
+            net.conns = net.conns.filter((c) => c !== conn);
+            if (net.conns.length) return;
+            netStatus("lost", "Connection lost. Trying again...");
+            clearTimeout(retry);
+            retry = setTimeout(dial, 3000);
+          };
+          conn.on("open", () => {
+            conn.seen = Date.now();
+            net.conns = [conn];
+            netSend(conn, { t: "hello" });
+          });
+          conn.on("data", (msg) => {
+            conn.seen = Date.now();
+            if (!msg || net.peer !== peer) return;
+            if (msg.t === "welcome") {
+              net.seat = msg.seat;
+              net.rev = msg.rev;
+              netApply(msg.state);
+              if (modal && modal.kind === "newgame") modal = null;
+              netStatus("connected");
+            } else if (msg.t === "state") {
+              net.rev = msg.rev;
+              netApply(msg.state, msg.by === peer.id);
+              if (msg.rejected) toast("The other player moved first: the board was refreshed");
+            }
+          });
+          conn.on("close", lost);
+          conn.on("error", lost);
+        };
+        peer.on("open", dial);
+        peer.on("error", (err) => {
+          if (net.peer !== peer) return;
+          if (err.type === "peer-unavailable") {
+            netStatus("lost", "No room with that code is open right now. Trying again...");
+            clearTimeout(retry);
+            retry = setTimeout(dial, 4000);
+          } else netStatus("error", "Network problem: " + err.type);
+        });
+        peer.on("disconnected", () => {
+          if (net.peer === peer && !peer.destroyed)
+            setTimeout(() => net.peer === peer && !peer.destroyed && peer.reconnect(), 3000);
+        });
+        netHeartbeat();
+      }
+
+      function netLabel() {
+        const me = net.seat >= 0 ? state.players[net.seat].name : "watching";
+        if (net.status === "connected") return net.role === "host" ? "Online · " + me : "Online · " + me;
+        if (net.status === "waiting") return "Room " + net.room + " · waiting";
+        if (net.status === "lost") return "Reconnecting...";
+        if (net.status === "error") return "Online problem";
+        return "Connecting...";
+      }
+      function renderOnlineModal() {
+        const seatBtn = (i) =>
+          '<button class="btn' +
+          (modal.seat === i ? " on" : "") +
+          '" data-act="netseat:' +
+          i +
+          '">' +
+          esc(state.players[i].name) +
+          "</button>";
+        let h = "<h2>Play online</h2>";
+        if (!online()) {
+          h +=
+            '<div class="mlabel">Start a room (you keep the game; the other player connects to you)</div>' +
+            '<div class="row"><label>You play</label>' +
+            seatBtn(0) +
+            seatBtn(1) +
+            "</div>" +
+            '<div class="grid go" style="margin-top:8px"><button class="btn on" data-act="nethost">Host this game</button><span></span></div>' +
+            '<div class="mlabel" style="margin-top:18px">Or join a room</div>' +
+            '<div class="row"><input id="roomInput" placeholder="ROOM CODE" maxlength="12" style="text-transform:uppercase" value="' +
+            esc(modal.room || "") +
+            '">' +
+            '<button class="btn on" data-act="netjoin">Join</button></div>' +
+            '<div class="hint">Both players need this page open at the same time. The game lives in the host\'s browser; if the host closes the tab the session ends, and either player can host again from where it stopped.</div>' +
+            '<div class="grid go"><span></span><button class="btn" data-act="modal-no">Close</button></div>';
+        } else {
+          const me =
+            net.seat >= 0
+              ? state.players[net.seat].name
+              : "nobody (watching only: both commanders are taken)";
+          h +=
+            '<div class="mtext">' +
+            (net.status === "connected"
+              ? net.role === "host"
+                ? "The other player is connected."
+                : "Connected to the host."
+              : net.status === "waiting"
+                ? "Waiting for the other player to join."
+                : esc(net.note || "Connecting...")) +
+            "</div>" +
+            '<div class="row"><label>You play</label><b>' +
+            esc(me) +
+            "</b></div>" +
+            '<div class="row"><label>Room code</label><b style="color:var(--or);font-size:18px;letter-spacing:.2em">' +
+            esc(net.room) +
+            "</b></div>";
+          if (net.role === "host")
+            h +=
+              '<div class="mlabel">Send this link to the other player</div>' +
+              '<div class="row"><input id="roomLink" readonly value="' +
+              esc(roomLink(net.room)) +
+              '"><button class="btn" data-act="netcopy">Copy</button></div>';
+          h +=
+            '<div class="grid go"><button class="btn warn" data-act="netstop">' +
+            (net.role === "host" ? "Close the room" : "Leave the room") +
+            '</button><button class="btn" data-act="modal-no">Close</button></div>';
+        }
+        $("modalBox").innerHTML = h;
+      }
+
       function renderModal() {
         $("modal").classList.toggle("show", !!modal);
         if (!modal) return;
+        if (modal.kind === "online") return renderOnlineModal();
         if (modal.kind === "confirm") {
           $("modalBox").innerHTML =
             "<h2>Are you sure?</h2>" +
@@ -2471,6 +2807,9 @@
           const i = $("rule-" + r[0]);
           if (document.activeElement !== i) i.value = state.rules[r[0]];
         });
+        $("netBtn").textContent = online() ? netLabel() : "Play online";
+        $("netBtn").classList.toggle("on", net.status === "connected");
+        $("netBtn").classList.toggle("warn", net.status === "lost" || net.status === "error");
         renderSelection();
         renderPlayers();
         renderModal();
@@ -2580,6 +2919,29 @@
           case "newgame":
             openNewGame();
             break;
+          case "online":
+            modal = { kind: "online", seat: state.current, room: "" };
+            renderModal();
+            break;
+          case "netseat":
+            modal.seat = +a;
+            renderModal();
+            break;
+          case "nethost":
+            netHost(modal.seat);
+            break;
+          case "netjoin":
+            netJoin($("roomInput").value);
+            break;
+          case "netstop":
+            netStop();
+            break;
+          case "netcopy":
+            $("roomLink").select();
+            if (navigator.clipboard)
+              navigator.clipboard.writeText($("roomLink").value).then(() => toast("Link copied"));
+            else document.execCommand("copy");
+            break;
           case "ng":
             modal[a] = c;
             renderModal();
@@ -2681,7 +3043,17 @@
 
       resize();
       syncScene();
-      if (fresh) openNewGame();
+      // A link with ?room=CODE joins that room; a host that reloads reopens its room.
+      const joinRoom = new URLSearchParams(location.search).get("room");
+      let hosted = null;
+      try {
+        hosted = JSON.parse(sessionStorage.getItem("gzsq-host"));
+      } catch (e) {}
+      if (joinRoom) {
+        modal = { kind: "online", seat: 0, room: joinRoom };
+        netJoin(joinRoom);
+      } else if (hosted && hosted.room) netHost(hosted.seat === 1 ? 1 : 0, hosted.room);
+      else if (fresh) openNewGame();
       renderUI();
       requestAnimationFrame(frame);
     </script>
