@@ -971,6 +971,7 @@
             map: bn.kind === "planet" ? +b.map : -1,
             era: b.era === "c" || b.era === "g" ? b.era : null,
             die: +b.die || 0,
+            free: !!b.free,
             mode: String(b.mode || "con"),
             space: String(b.space || ""),
             use: [0, 1].map((i) => {
@@ -1206,9 +1207,16 @@
         const m = n.maps[b.map];
         return m.code ? m.code + b.era + "_" + battleMode(b) : "";
       }
+      // A battle set up or changed in edit mode is "free": any era, any mode and any bonus can be set
+      // on it, whether or not it has been bought. The mark travels with the battle, so the other
+      // player's card shows the same thing.
+      const freeBattle = (b) => edit || !!(b && b.free);
+      const markFree = () => {
+        if (edit && state.battle) state.battle.free = true;
+      };
       // Eras this battle can be fought in: what the game really has for the map, when that is known.
       function battleEras(b) {
-        if (b.map < 0) return "cg";
+        if (b.map < 0 || freeBattle(b)) return "cg";
         const m = nodeById(b.node).maps[b.map],
           cat = catalogOf(m.code);
         return (cat && ["c", "g"].filter((e) => cat[e]).join("")) || m.eras;
@@ -1218,7 +1226,7 @@
         if (b.map < 0) return [["ass", "Space assault"]];
         const cat = catalogOf(nodeById(b.node).maps[b.map].code),
           real = cat && b.era && cat[b.era] ? MODES.filter((x) => cat[b.era].includes(x[0])) : [];
-        return real.length ? real : MODES;
+        return real.length && !freeBattle(b) ? real : MODES;
       }
       // The chosen mode, or the first one on offer if the chosen one does not exist for this map.
       function battleMode(b) {
@@ -1244,7 +1252,7 @@
           modal = { kind: "battle", wanted: { node: node.id, map: mapIdx } };
           return renderModal();
         }
-        if (state.phase === "draft") return toast("Finish picking planets first");
+        if (!edit && state.phase === "draft") return toast("Finish picking planets first");
         if (!edit && !mySeat(state.current)) return turnToast();
         mutate(() => {
           const nb = (state.battle = {
@@ -1252,6 +1260,7 @@
             map: mapIdx,
             era: null,
             die: 0,
+            free: edit,
             mode: "con",
             space: "",
             use: [{}, {}],
@@ -3148,6 +3157,9 @@
             '</b>. Record who won it below, or drop it:<div class="grid" style="margin-top:8px"><button class="btn on" data-act="bswitch">Drop it and start ' +
             esc(battleName(wn, modal.wanted.map)) +
             "</button><span></span></div></div>";
+        if (freeBattle(b))
+          h +=
+            '<div class="hint" style="min-height:0;margin:0 0 10px;color:var(--or)">Set up in edit mode: any era, mode and bonus can be chosen here, bought or not. Recording the result only uses up bonuses that were actually in hand.</div>';
         h +=
           "<h2>Battle · " +
           esc(n.name) +
@@ -3212,9 +3224,9 @@
               "</span>" +
               "</div>";
             // the bonuses this commander holds: click to field them in this battle
-            const chipsHtml = BONUSES.filter((x) => p.bonuses[x[0]] > 0)
+            const chipsHtml = BONUSES.filter((x) => p.bonuses[x[0]] > 0 || b.use[i][x[0]] || freeBattle(b))
               .map((x) => {
-                const blocked = b.map < 0 && !x[3];
+                const blocked = b.map < 0 && !x[3] && !freeBattle(b);
                 return (
                   '<button class="chip b' +
                   (b.use[i][x[0]] ? " on" : "") +
@@ -3259,7 +3271,7 @@
             ? ""
             : '<div class="hint" style="min-height:0;margin:0 0 6px">These modes are not checked against your game yet, and a mode the map does not have loads a different map. Run <b>install-mods.bat -ScanMissions</b> once to load the real list.</div>') +
           '<div class="grid"><button class="btn on" data-act="launch"' +
-          (mission && status !== "missing" ? "" : " disabled") +
+          (mission && (status !== "missing" || freeBattle(b)) ? "" : " disabled") +
           ' title="Starts Battlefront II on this mission. Needs the launcher installed on this PC; you are offered it if it is missing.">Launch game</button>' +
           '<button class="btn" data-act="bcopy"' +
           (mission ? "" : " disabled") +
@@ -3268,9 +3280,7 @@
           // one checklist line per commander who is fielding bonuses, in the Fake Console's own wording
           const fielded = state.players
             .map((p, i) => {
-              const names = BONUSES.filter((x) => b.use[i][x[0]] && p.bonuses[x[0]] > 0).map(
-                (x) => "<b>Bonus # " + x[1] + "</b>",
-              );
+              const names = BONUSES.filter((x) => b.use[i][x[0]]).map((x) => "<b>Bonus # " + x[1] + "</b>");
               return names.length
                 ? "<li>" +
                     esc(p.name) +
@@ -3510,6 +3520,7 @@
             if (online() && !edit && !mySeat(+a)) toast("You are not playing " + state.players[+a].name);
             else
               mutate(() => {
+                markFree();
                 const use = state.battle.use[+a];
                 if (use[c]) delete use[c];
                 else use[c] = true;
@@ -3520,7 +3531,10 @@
             renderModal();
             break;
           case "bera":
-            mutate(() => setBattleEra(state.battle, a, 0));
+            mutate(() => {
+              markFree();
+              setBattleEra(state.battle, a, 0);
+            });
             break;
           case "bswap":
             mutate(() => {
@@ -3693,9 +3707,13 @@
             n.maps[+i].code = t.value;
             fillMapCode(n.name, n.maps[+i]);
           } else if (f === "maperas" && n) n.maps[+i].eras = t.value;
-          else if (f === "bmode" && state.battle) state.battle.mode = t.value;
-          else if (f === "bspace" && state.battle) state.battle.space = t.value;
-          else if (f === "value") {
+          else if (f === "bmode" && state.battle) {
+            markFree();
+            state.battle.mode = t.value;
+          } else if (f === "bspace" && state.battle) {
+            markFree();
+            state.battle.space = t.value;
+          } else if (f === "value") {
             const l = state.lanes.find((x) => x.id === sel.id);
             if (l) l.value = +t.value || 0;
           } else if (f === "fleetnode") {
