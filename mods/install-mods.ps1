@@ -124,7 +124,7 @@ $Mods = @(
        Url  = 'https://www.moddb.com/mods/xbox-dlc-content-for-pc/downloads/xbox-dlc-and-title-update-content-for-pc' }
     @{ Key = 'ai'; Name = 'AI Difficulty mod 2.0'; Default = $true; Source = 'moddb'; Kind = 'lvl'
        What = 'Elite AI on the stock maps (replaces mission.lvl). If stock maps misbehave afterwards: install-launcher.bat -Undo ai'
-       NameLike = 'ai'; MaxMB = 300; Contains = @('mission.lvl')
+       NameLike = 'difficult|(^|[^a-z])ai([^a-z]|$)'; MaxMB = 300; Contains = @('mission.lvl')
        Url  = 'https://www.moddb.com/games/star-wars-battlefront-ii/downloads/ai-difficulty-mod' }
     @{ Key = 'shader-patch'; Name = 'Shader Patch (PrismaticFlower)'; Default = $true; Source = 'github'; Kind = 'overlay-root'
        What = 'Modern renderer: fixed water, better lighting, HUD scaling.'
@@ -797,8 +797,13 @@ function Get-ManualDownload($Mod, [string]$WatchDir, [int]$TimeoutMinutes = 240)
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($new -and (Test-DownloadFinished $new)) {
                 $sizeMb = [math]::Round($new.Length / 1MB, 1)
-                $looksRight = (-not $Mod.NameLike) -or ($new.Name -match $Mod.NameLike)
-                if (-not $looksRight) { Write-Warn "'$($new.Name)' does not look like the file name for this mod." }
+                # A file that arrives right after this mod's page was opened is almost certainly this mod,
+                # whatever it is called, so the answer defaults to Yes. It defaults to No only when the
+                # name looks like one of the OTHER mods and not like this one.
+                $own = $Mod.NameLike -and ($new.Name -match $Mod.NameLike)
+                $others = @($Mods | Where-Object { $_.Key -ne $Mod.Key -and $_.NameLike -and $_.NameLike -ne $Mod.NameLike -and ($new.Name -match $_.NameLike) })
+                $looksRight = $own -or -not $others.Count
+                if (-not $looksRight) { Write-Warn "'$($new.Name)' looks like the file for $($others[0].Name), not this mod." }
                 if (Read-YesNo "Found '$($new.Name)' ($sizeMb MB). Is this the file for $($Mod.Name)?" $looksRight) { $picked = $new } else { $rejected[$new.FullName] = $true }
             }
         }
