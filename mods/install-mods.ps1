@@ -352,7 +352,13 @@ function Expand-ModArchive([string]$File, [string]$Dest) {
     New-Item -ItemType Directory -Path $Dest -Force | Out-Null
     $sevenZip = Find-SevenZip
     if ([IO.Path]::GetExtension($File).ToLower() -eq '.zip' -and -not $sevenZip) {
-        Expand-Archive -LiteralPath $File -DestinationPath $Dest -Force
+        # .NET's unzip, which is many times faster on a big archive than PowerShell's Expand-Archive
+        try {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory($File, $Dest)
+        } catch {
+            Stop-Script "Could not unzip $File : $($_.Exception.Message). The download may be incomplete: delete it and run again."
+        }
         return
     }
     if (-not $sevenZip) { $sevenZip = Install-SevenZip }
@@ -413,6 +419,21 @@ function Get-PackageLayout([string]$Dir) {
 function Test-ModDownload($Mod, [string]$File) {
     $item = Get-Item -LiteralPath $File
     $sizeMb = [math]::Round($item.Length / 1MB, 1)
+    if ($item.Extension.ToLower() -eq '.zip') {
+        # A zip keeps its table of contents at the end, so one that was cut short will not open.
+        try {
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            $zip = [IO.Compression.ZipFile]::OpenRead($File)
+            $zip.Dispose()
+        } catch {
+            Write-Warn "This download is incomplete or damaged (it will not open as a zip). Deleting the installer's copy; run again to pick it up afresh."
+            Remove-Item -LiteralPath $File -Force
+            return $false
+        }
+    }
+    if ($sizeMb -gt 500 -and (($script:SetList -and $script:SetList.mods) -or (Test-Path -LiteralPath "$File.sha256"))) {
+        Write-Info "Checking the file's checksum ($sizeMb MB, up to a minute)..."
+    }
     $listed = $null
     if ($script:SetList -and $script:SetList.mods) { $listed = $script:SetList.mods.($Mod.Key) }
     if ($listed -and $listed.sha256) {
@@ -712,6 +733,21 @@ function Get-DirectDownload($Mod) {
     return $target
 }
 
+# Keeps the installer's own copy of a browser download. On the same drive this is a hard link: a
+# second name for the same file, made instantly and using no extra space. Otherwise it is a real
+# copy, written under a temporary name so an interrupted copy is never mistaken for a whole file.
+function Save-DownloadCopy([IO.FileInfo]$Source, [string]$Target) {
+    Remove-Item -LiteralPath $Target, "$Target.part" -Force -ErrorAction SilentlyContinue
+    try {
+        New-Item -ItemType HardLink -Path $Target -Value $Source.FullName -ErrorAction Stop | Out-Null
+        return
+    } catch { }
+    $sizeMb = [math]::Round($Source.Length / 1MB)
+    if ($sizeMb -gt 200) { Write-Info "Copying it to the installer's folder ($sizeMb MB). This is not stuck; a big file takes a few minutes..." }
+    Copy-Item -LiteralPath $Source.FullName -Destination "$Target.part" -Force
+    Move-Item -LiteralPath "$Target.part" -Destination $Target -Force
+}
+
 function Get-BrowserDownloadsFolder {
     try { return (New-Object -ComObject Shell.Application).NameSpace('shell:Downloads').Self.Path } catch { }
     return (Join-Path ([Environment]::GetFolderPath('UserProfile')) 'Downloads')
@@ -768,7 +804,7 @@ function Get-ManualDownload($Mod, [string]$WatchDir, [int]$TimeoutMinutes = 240)
         }
         if ($picked) {
             $target = Join-Path $DownloadDir ($Mod.Key + $picked.Extension.ToLower())
-            Copy-Item -LiteralPath $picked.FullName -Destination $target -Force
+            Save-DownloadCopy $picked $target
             return $target
         }
         Start-Sleep -Seconds 2
@@ -801,7 +837,9 @@ function Install-Mod($Mod, [string]$File, [string]$GameData, [string]$BackupDir)
     if ([IO.Path]::GetExtension($File).ToLower() -eq '.exe') { return (Start-ModInstaller $File $GameData) }
 
     $extracted = Join-Path $WorkDir $Mod.Key
-    Write-Info 'Extracting...'
+    $archiveMb = [math]::Round((Get-Item -LiteralPath $File).Length / 1MB)
+    if ($archiveMb -gt 500) { Write-Info "Extracting $archiveMb MB. This is not stuck; it takes a few minutes and prints nothing while it works..." }
+    else { Write-Info 'Extracting...' }
     Expand-ModArchive $File $extracted
     if (-not (Test-ModContents $Mod $extracted)) { return $false }
 
@@ -1171,6 +1209,7 @@ function Invoke-Main {
     }
 
     New-Item -ItemType Directory -Path $DownloadDir, $WorkDir -Force | Out-Null
+    Remove-Item -Path (Join-Path $DownloadDir '*.part') -Force -ErrorAction SilentlyContinue   # copies cut short last time
     $statePath = Join-Path $gameData 'seanquest-mods.json'
     $installed = @{}
     if (Test-Path -LiteralPath $statePath) {
