@@ -252,6 +252,9 @@
         border-color: #fff;
         font-weight: 700;
       }
+      .chip.b.on {
+        color: #000;
+      }
       .chip.b {
         width: auto;
         padding: 1px 5px;
@@ -503,6 +506,36 @@
       #modalBox .go {
         margin-top: 16px;
       }
+      #modalBox.wide {
+        width: 560px;
+      }
+      #modalBox ol {
+        margin: 6px 0 0;
+        padding-left: 20px;
+        color: var(--txt);
+        font-size: 12px;
+      }
+      #modalBox ol li {
+        margin: 3px 0;
+      }
+      #modalBox .code {
+        font-family: Consolas, "Courier New", monospace;
+        color: var(--or);
+        font-size: 15px;
+        letter-spacing: 0.08em;
+      }
+      .map2 {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0 0 8px 0;
+        color: var(--dim);
+        font-size: 10px;
+        text-transform: uppercase;
+      }
+      .map2 input {
+        width: 70px;
+      }
       #err {
         display: none;
         position: fixed;
@@ -538,14 +571,10 @@
       >
         Play online
       </button>
-      <button class="btn" data-act="newgame" title="Open the new-game menu">New game</button>
-      <button
-        class="btn"
-        data-act="era"
-        title="Roll a d6 for the era of the next fight (odd = Clone Wars, even = Galactic Civil War)"
-      >
-        Roll era
+      <button class="btn on" id="battleBtn" data-act="battleshow" title="Reopen the battle card" hidden>
+        Battle
       </button>
+      <button class="btn" data-act="newgame" title="Open the new-game menu">New game</button>
       <button class="btn" data-act="endturn" title="Pay income to the current player and pass the turn">
         End turn
       </button>
@@ -650,6 +679,61 @@
         ["startCredits", "Starting credits", 100],
       ];
 
+      // Which faction each commander plays depends on the era of the battle.
+      const FACTIONS = { c: ["Republic", "CIS"], g: ["Rebels", "Empire"] };
+      const ERA_NAMES = { c: "Clone Wars", g: "Galactic Civil War" };
+      const sideOf = (pi, era) => FACTIONS[era][state.sides[era] === pi ? 0 : 1];
+      // The game names each battle with a mission code: map + era letter + mode, e.g. cor1c_con.
+      // These are the stock maps' codes; maps added by mods need theirs typed in (edit mode).
+      const STOCK_CODES = {
+        "coruscant|jedi temple": ["cor1", "cg"],
+        "dagobah|swamp": ["dag1", "cg"],
+        "death star|interior": ["dea1", "cg"],
+        "endor|bunker": ["end1", "g"],
+        "felucia|marshland": ["fel1", "cg"],
+        "geonosis|dust plains": ["geo1", "c"],
+        "hoth|echo base": ["hot1", "g"],
+        "kamino|cloning facility": ["kam1", "cg"],
+        "kashyyyk|beachhead": ["kas2", "cg"],
+        "mustafar|refinery": ["mus1", "cg"],
+        "mygeeto|war-torn city": ["myg1", "cg"],
+        "naboo|theed": ["nab2", "cg"],
+        "polis massa|medical facility": ["pol1", "cg"],
+        "tantive iv|interior": ["tan1", "cg"],
+        "tatooine|jabba's palace": ["tat3", "cg"],
+        "tatooine|mos eisley": ["tat2", "cg"],
+        "utapau|sinkhole": ["uta1", "cg"],
+        "yavin 4|temple": ["yav1", "cg"],
+      };
+      const MODES = [
+        ["con", "Conquest"],
+        ["ctf", "Capture the flag"],
+        ["1flag", "1-flag CTF"],
+        ["hunt", "Hunt"],
+        ["eli", "Hero assault"],
+      ];
+      const SPACE_MAPS = [
+        ["spa1", "g", "Space Yavin"],
+        ["spa8", "g", "Space Hoth"],
+        ["spa9", "g", "Space Tatooine"],
+        ["spa3", "c", "Space Kashyyyk"],
+        ["spa6", "c", "Space Felucia"],
+        ["spa7", "c", "Space Mygeeto"],
+      ];
+      // Give a map its mission code and eras if it has none yet (new boards and older saved games).
+      function fillMapCode(planetName, m) {
+        if (typeof m.code !== "string") {
+          const hit = STOCK_CODES[(planetName + "|" + m.name).toLowerCase()];
+          m.code = hit ? hit[0] : "";
+          m.eras = hit ? hit[1] : "cg";
+        }
+        m.code = m.code
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .slice(0, 8);
+        if (!["cg", "c", "g"].includes(m.eras)) m.eras = "cg";
+      }
+
       function defaultState() {
         const P = (id, name, type, size, x, z, maps, extra) =>
           Object.assign(
@@ -663,7 +747,11 @@
               z,
               ring: false,
               capital: false,
-              maps: maps.map((m) => ({ name: m, owner: -1 })),
+              maps: maps.map((m) => {
+                const map = { name: m, owner: -1 };
+                fillMapCode(name, map);
+                return map;
+              }),
             },
             extra,
           );
@@ -696,6 +784,8 @@
           ply: 0,
           era: null,
           phase: "play",
+          sides: { c: 0, g: 0 }, // which commander plays the first-listed faction in each era
+          battle: null, // the battle being set up or fought: { node, map, era, mode, space, hero }
           players: [
             {
               name: "Zack",
@@ -748,6 +838,7 @@
           p.faction = String(p.faction || "");
           if (!/^#[0-9a-f]{6}$/i.test(p.color)) p.color = d.players[i].color;
           p.credits = Math.max(0, +p.credits || 0);
+          p.heroes = Math.max(0, Math.floor(+p.heroes || 0)); // heroes bought and not yet used in a battle
           p.movesBought = +p.movesBought || 0;
           if (p.lastStandAt === undefined) p.lastStandAt = null;
         });
@@ -764,6 +855,7 @@
             n.maps.forEach((m) => {
               m.name = String(m.name || "");
               m.owner = m.owner === 0 || m.owner === 1 ? m.owner : -1;
+              fillMapCode(n.name, m);
             });
             if (n.maps.length !== 1) n.capital = false;
           }
@@ -779,6 +871,20 @@
         s.current = s.current === 1 ? 1 : 0;
         s.ply = +s.ply || 0;
         s.phase = s.phase === "draft" ? "draft" : "play";
+        s.sides = { c: s.sides && s.sides.c === 1 ? 1 : 0, g: s.sides && s.sides.g === 1 ? 1 : 0 };
+        const b = s.battle,
+          bn = b && s.nodes.find((n) => n.id === b.node);
+        if (!bn || (bn.kind === "planet" && !bn.maps[b.map])) s.battle = null;
+        else
+          s.battle = {
+            node: b.node,
+            map: bn.kind === "planet" ? +b.map : -1,
+            era: b.era === "c" || b.era === "g" ? b.era : null,
+            die: +b.die || 0,
+            mode: String(b.mode || "con"),
+            space: String(b.space || ""),
+            hero: [!!(b.hero && b.hero[0]), !!(b.hero && b.hero[1])],
+          };
         return s;
       }
 
@@ -790,6 +896,7 @@
         state = defaultState();
         fresh = true;
       }
+      let shownBattle = ""; // the battle whose card has already been popped up on this screen
       let logOpen = false; // the log is a tab at the bottom edge until pulled up
       let placing = null, // commander index while choosing where a new fleet deploys
         modal = null; // open dialog: { kind: "confirm" | "newgame", ... }
@@ -928,6 +1035,7 @@
           return commit();
         } else if (what === "hero") {
           if (!spend(pi, r.hero, "a hero")) return;
+          p.heroes++;
         } else if (what === "faction") {
           if (!spend(pi, r.factionPick, "a faction pick")) return;
         } else if (what === "stand") {
@@ -959,6 +1067,7 @@
         };
         renderModal();
       }
+      // Records who won. Ends the battle being set up, and uses up any hero fielded in it.
       function battle(node, mapIdx, winner) {
         mutate(() => {
           const W = state.players[winner],
@@ -971,8 +1080,70 @@
             node.maps[mapIdx].owner = winner;
             where += ": " + node.maps[mapIdx].name;
           }
+          const b = state.battle;
+          if (b && b.node === node.id && b.map === mapIdx) {
+            state.players.forEach((p, i) => {
+              if (b.hero[i] && p.heroes > 0) p.heroes--;
+            });
+            state.battle = null;
+          }
           log(W.name + " won at " + where + " (+" + r.battleWin + "), " + L.name + " +" + r.battleLoss);
         });
+      }
+      // The mission code for the battle as currently set up, or "" if something is still missing.
+      function battleMission(b) {
+        if (!b || !b.era) return "";
+        const n = nodeById(b.node);
+        if (b.map < 0) return b.space ? b.space + b.era + "_ass" : "";
+        const m = n.maps[b.map];
+        return m.code ? m.code + b.era + "_" + b.mode : "";
+      }
+      function battleEras(b) {
+        const n = nodeById(b.node);
+        return b.map < 0 ? "cg" : n.maps[b.map].eras;
+      }
+      function setBattleEra(b, era, die) {
+        b.era = era;
+        b.die = die || 0;
+        if (b.map < 0 && !SPACE_MAPS.some((s) => s[0] === b.space && s[1] === era))
+          b.space = SPACE_MAPS.find((s) => s[1] === era)[0];
+      }
+      // Opens the battle card for a map (or for a space point when mapIdx is -1).
+      function startBattle(node, mapIdx) {
+        const b = state.battle;
+        if (b && b.node === node.id && b.map === mapIdx) {
+          modal = { kind: "battle" };
+          return renderModal();
+        }
+        if (b) return toast("Finish or cancel the battle at " + nodeById(b.node).name + " first");
+        if (state.phase === "draft") return toast("Finish picking planets first");
+        if (!edit && !mySeat(state.current)) return turnToast();
+        mutate(() => {
+          const nb = (state.battle = {
+            node: node.id,
+            map: mapIdx,
+            era: null,
+            die: 0,
+            mode: "con",
+            space: "",
+            hero: [false, false],
+          });
+          const eras = battleEras(nb);
+          if (eras.length === 1) setBattleEra(nb, eras, 0);
+          log("Battle called at " + node.name + (mapIdx >= 0 ? ": " + node.maps[mapIdx].name : ""));
+        });
+      }
+      // Asks the launcher helper (installed by mods/install-mods) to start the game on this mission.
+      // A hidden frame is used so a PC without the helper just does nothing instead of leaving the page.
+      function launchGame(mission) {
+        if (!/^[a-z0-9]{3,8}[cg]_[a-z0-9]{2,8}$/.test(mission))
+          return toast("No mission code for this battle yet");
+        const frame = document.createElement("iframe");
+        frame.style.display = "none";
+        frame.src = "seanquest://launch?mission=" + mission;
+        document.body.appendChild(frame);
+        setTimeout(() => frame.remove(), 3000);
+        toast("Asked the launcher to start " + mission);
       }
       function endTurn() {
         if (state.phase === "draft") return toast("Finish picking planets first");
@@ -1005,6 +1176,9 @@
           const die = 1 + Math.floor(Math.random() * 6);
           state.era = { die, era: die % 2 ? "Clone Wars" : "Galactic Civil War" };
           log("Era roll: " + die + " → " + state.era.era);
+          // A roll made while a battle is being set up decides that battle's era, if the map has both.
+          const b = state.battle;
+          if (b && battleEras(b).length === 2) setBattleEra(b, die % 2 ? "c" : "g", die);
         });
       }
       function moveFleet(f, to) {
@@ -1035,6 +1209,7 @@
           });
           state.players.forEach((p) => {
             p.credits = state.rules.startCredits;
+            p.heroes = 0;
             p.movesBought = 0;
             p.lastStandAt = null;
           });
@@ -1048,6 +1223,7 @@
             log: [],
           });
           state.draftCapitals = !!o.capitals;
+          state.battle = null;
           sel = null;
           const planets = state.nodes.filter(isUnclaimed),
             names = state.players.map((p) => p.name);
@@ -2123,27 +2299,6 @@
               "</button>",
           )
           .join("");
-      const winBtns = (act) =>
-        state.players
-          .map(
-            (p, i) =>
-              '<button class="chip b" style="--pc:' +
-              p.color +
-              '" data-act="' +
-              act +
-              ":" +
-              i +
-              '" title="' +
-              esc(p.name) +
-              " won the battle here: +" +
-              state.rules.battleWin +
-              ", loser +" +
-              state.rules.battleLoss +
-              '">' +
-              esc(p.name[0] || i + 1) +
-              " won</button>",
-          )
-          .join("");
       const fleetRows = (list, short) =>
         list
           .map(
@@ -2215,13 +2370,43 @@
                   ? '<input class="mn" data-f="map" data-i="' + i + '" value="' + esc(m.name) + '">'
                   : '<span class="mn">' + esc(m.name) + "</span>") +
                 chips("own:" + i, m.owner) +
-                winBtns("battle:" + i) +
+                '<button class="chip b' +
+                (state.battle && state.battle.node === n.id && state.battle.map === i ? " on" : "") +
+                '" style="--pc:var(--or)" data-act="battleopen:' +
+                i +
+                '" title="Set up a battle on this map: era, sides, mode and launch">Battle</button>' +
                 '<button class="chip edit-only" data-act="delmap:' +
                 i +
-                '" title="Remove map">✕</button></div>';
+                '" title="Remove map">✕</button></div>' +
+                '<div class="map2 edit-only">Mission code<input data-f="mapcode" data-i="' +
+                i +
+                '" value="' +
+                esc(m.code) +
+                '" placeholder="e.g. cor1" title="The map part of the game\'s mission code, without era or mode">Eras<select data-f="maperas" data-i="' +
+                i +
+                '">' +
+                [
+                  ["cg", "Both"],
+                  ["c", "Clone Wars"],
+                  ["g", "Civil War"],
+                ]
+                  .map(
+                    (o) =>
+                      '<option value="' +
+                      o[0] +
+                      '"' +
+                      (m.eras === o[0] ? " selected" : "") +
+                      ">" +
+                      o[1] +
+                      "</option>",
+                  )
+                  .join("") +
+                "</select></div>";
             });
             h += '<button class="btn edit-only" data-act="addmap">+ Map</button>';
-          } else h += '<div class="row"><label>Space battle</label>' + winBtns("battle:-1") + "</div>";
+          } else
+            h +=
+              '<div class="row"><label>Space battle</label><button class="chip b" style="--pc:var(--or)" data-act="battleopen:-1" title="Set up a space battle here">Battle</button></div>';
           const here = state.fleets.filter((f) => f.node === n.id);
           if (here.length) h += '<h2 style="margin-top:10px">Fleets here</h2>' + fleetRows(here);
           h +=
@@ -2331,7 +2516,7 @@
               ' this commander"><b>' +
               esc(p.name) +
               "</b><span>" +
-              esc(p.faction) +
+              esc(sideOf(i, "c") + " / " + sideOf(i, "g")) +
               '</span><span class="rt">' +
               (p.lastStandAt !== null
                 ? '<span class="tag" title="Last stand called: their next turn is used up">Last stand</span>'
@@ -2352,11 +2537,6 @@
               '" value="' +
               p.color +
               '"></div></div>' +
-              '<div class="row"><label>Faction</label><input data-f="pfaction" data-i="' +
-              i +
-              '" value="' +
-              esc(p.faction) +
-              '"></div>' +
               '<div class="cr"><button class="btn" data-act="cred:' +
               i +
               ':-50"' +
@@ -2376,6 +2556,7 @@
               income(i) +
               " / turn<br>next move point " +
               moveCost(i) +
+              (p.heroes ? " · " + p.heroes + (p.heroes === 1 ? " hero" : " heroes") + " in hand" : "") +
               "</div>" +
               '<div class="grid"><button class="btn' +
               (placing === i ? " on" : "") +
@@ -2726,10 +2907,165 @@
         $("modalBox").innerHTML = h;
       }
 
+      // The battle card: everything both players need to start the right match, and the result buttons.
+      function renderBattleModal() {
+        const b = state.battle;
+        if (!b) {
+          modal = null;
+          return renderModal();
+        }
+        const n = nodeById(b.node),
+          m = b.map >= 0 ? n.maps[b.map] : null,
+          eras = battleEras(b),
+          mission = battleMission(b),
+          modeName = b.map < 0 ? "Space assault" : (MODES.find((x) => x[0] === b.mode) || ["", b.mode])[1];
+        const eraBtn = (e) =>
+          '<button class="btn' +
+          (b.era === e ? " on" : "") +
+          '" data-act="bera:' +
+          e +
+          '"' +
+          (eras.includes(e) ? "" : " disabled") +
+          ">" +
+          ERA_NAMES[e] +
+          "</button>";
+        let h =
+          "<h2>Battle · " +
+          esc(n.name) +
+          (m ? ": " + esc(m.name) : " (space)") +
+          "</h2>" +
+          '<div class="mlabel">Era' +
+          (b.die ? " · rolled " + b.die : "") +
+          (eras.length === 1 ? " · this map only has one" : "") +
+          "</div>" +
+          '<div class="grid3">' +
+          eraBtn("c") +
+          eraBtn("g") +
+          '<button class="btn" data-act="era"' +
+          (eras.length === 1 ? " disabled" : "") +
+          ' title="Odd = Clone Wars, even = Galactic Civil War">Roll the die</button></div>';
+        if (b.map < 0)
+          h +=
+            '<div class="row" style="margin-top:10px"><label>Space map</label><select data-f="bspace"' +
+            (b.era ? "" : " disabled") +
+            ">" +
+            SPACE_MAPS.filter((s) => s[1] === b.era)
+              .map(
+                (s) =>
+                  '<option value="' +
+                  s[0] +
+                  '"' +
+                  (b.space === s[0] ? " selected" : "") +
+                  ">" +
+                  s[2] +
+                  "</option>",
+              )
+              .join("") +
+            "</select></div>";
+        else
+          h +=
+            '<div class="row" style="margin-top:10px"><label>Mode</label><select data-f="bmode">' +
+            MODES.map(
+              (x) =>
+                '<option value="' +
+                x[0] +
+                '"' +
+                (b.mode === x[0] ? " selected" : "") +
+                ">" +
+                x[1] +
+                "</option>",
+            ).join("") +
+            "</select></div>";
+        if (b.era) {
+          h += '<div class="mlabel">Sides in the ' + ERA_NAMES[b.era] + "</div>";
+          state.players.forEach((p, i) => {
+            h +=
+              '<div class="row"><span class="dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' +
+              p.color +
+              '"></span><b style="color:' +
+              p.color +
+              ';flex:0 0 90px;text-transform:uppercase">' +
+              esc(p.name) +
+              "</b><span>" +
+              sideOf(i, b.era) +
+              "</span>" +
+              (p.heroes > 0
+                ? '<label style="flex:1;text-align:right;color:var(--txt);text-transform:none;font-size:12px"><input type="checkbox" data-f="bhero" data-i="' +
+                  i +
+                  '"' +
+                  (b.hero[i] ? " checked" : "") +
+                  "> fields a hero (" +
+                  p.heroes +
+                  " in hand)</label>"
+                : "") +
+              "</div>";
+          });
+          h +=
+            '<button class="btn" data-act="bswap" title="For a commander who has bought a faction pick">Swap sides</button>';
+        }
+        h +=
+          '<div class="mlabel">Mission</div><div class="row"><span class="code">' +
+          (mission || (b.era ? "no mission code set for this map" : "pick or roll the era first")) +
+          "</span></div>" +
+          '<div class="grid"><button class="btn on" data-act="launch"' +
+          (mission ? "" : " disabled") +
+          ' title="Needs the launcher installed by mods/install-mods on this PC">Launch game</button>' +
+          '<button class="btn" data-act="bcopy"' +
+          (mission ? "" : " disabled") +
+          ">Copy mission code</button></div>";
+        if (b.era) {
+          const fielded = state.players
+            .map((p, i) => (b.hero[i] ? p.name + " (" + sideOf(i, b.era) + ")" : null))
+            .filter(Boolean);
+          h +=
+            '<div class="mlabel">In the game</div><ol>' +
+            "<li>One player hosts <b>" +
+            esc(
+              m
+                ? n.name + ": " + m.name
+                : (SPACE_MAPS.find((s) => s[0] === b.space) || ["", "", "the space map"])[2],
+            ) +
+            "</b>, " +
+            ERA_NAMES[b.era] +
+            ", " +
+            modeName +
+            "; the other joins.</li>" +
+            "<li>At the spawn screen " +
+            state.players.map((p, i) => esc(p.name) + " picks <b>" + sideOf(i, b.era) + "</b>").join(", ") +
+            ".</li>" +
+            (fielded.length
+              ? "<li>Hero for " +
+                esc(fielded.join(" and ")) +
+                ": pause, open Fake Console, and use <b>Bonus 1 Leader</b> or <b>Bonus 2 Leader</b>, whichever number is that faction's team on this map.</li>"
+              : "") +
+            "</ol>";
+        }
+        h +=
+          '<div class="mlabel">Result</div><div class="grid">' +
+          state.players
+            .map(
+              (p, i) =>
+                '<button class="btn" style="border-color:' +
+                p.color +
+                ";color:" +
+                p.color +
+                '" data-act="bwin:' +
+                i +
+                '">' +
+                esc(p.name) +
+                " won</button>",
+            )
+            .join("") +
+          '</div><div class="grid go"><button class="btn warn" data-act="bcancel">Cancel this battle</button><button class="btn" data-act="modal-no">Hide</button></div>';
+        $("modalBox").innerHTML = h;
+      }
+
       function renderModal() {
         $("modal").classList.toggle("show", !!modal);
         if (!modal) return;
+        $("modalBox").classList.toggle("wide", modal.kind === "battle");
         if (modal.kind === "online") return renderOnlineModal();
+        if (modal.kind === "battle") return renderBattleModal();
         if (modal.kind === "confirm") {
           $("modalBox").innerHTML =
             "<h2>Are you sure?</h2>" +
@@ -2807,6 +3143,11 @@
           const i = $("rule-" + r[0]);
           if (document.activeElement !== i) i.value = state.rules[r[0]];
         });
+        const battleKey = state.battle ? state.battle.node + ":" + state.battle.map : "";
+        if (battleKey && battleKey !== shownBattle) modal = { kind: "battle" }; // a battle was just called, here or by the other player
+        if (!battleKey && modal && modal.kind === "battle") modal = null;
+        shownBattle = battleKey;
+        $("battleBtn").hidden = !battleKey;
         $("netBtn").textContent = online() ? netLabel() : "Play online";
         $("netBtn").classList.toggle("on", net.status === "connected");
         $("netBtn").classList.toggle("warn", net.status === "lost" || net.status === "error");
@@ -2879,8 +3220,45 @@
                 n.maps[+a].owner = +c;
               });
             break;
-          case "battle":
-            if (n) battle(n, +a, +c);
+          case "battleopen":
+            if (n) startBattle(n, +a);
+            break;
+          case "battleshow":
+            modal = { kind: "battle" };
+            renderModal();
+            break;
+          case "bera":
+            mutate(() => setBattleEra(state.battle, a, 0));
+            break;
+          case "bswap":
+            mutate(() => {
+              const e = state.battle.era;
+              state.sides[e] = 1 - state.sides[e];
+              log(
+                "Sides swapped for the " +
+                  ERA_NAMES[e] +
+                  ": " +
+                  state.players.map((p, i) => p.name + " " + sideOf(i, e)).join(", "),
+              );
+            });
+            break;
+          case "bwin":
+            if (state.battle) battle(nodeById(state.battle.node), state.battle.map, +a);
+            break;
+          case "bcancel":
+            mutate(() => {
+              log("Battle at " + nodeById(state.battle.node).name + " cancelled");
+              state.battle = null;
+            });
+            break;
+          case "launch":
+            launchGame(battleMission(state.battle));
+            break;
+          case "bcopy":
+            if (navigator.clipboard)
+              navigator.clipboard
+                .writeText(battleMission(state.battle))
+                .then(() => toast("Mission code copied"));
             break;
           case "addmap":
             if (n)
@@ -2989,6 +3367,13 @@
           else if (f === "ring" && n) n.ring = t.checked;
           else if (f === "capital" && n) n.capital = t.checked && canBeCapital(n);
           else if (f === "map" && n) n.maps[+i].name = t.value;
+          else if (f === "mapcode" && n) {
+            n.maps[+i].code = t.value;
+            fillMapCode(n.name, n.maps[+i]);
+          } else if (f === "maperas" && n) n.maps[+i].eras = t.value;
+          else if (f === "bmode" && state.battle) state.battle.mode = t.value;
+          else if (f === "bspace" && state.battle) state.battle.space = t.value;
+          else if (f === "bhero" && state.battle) state.battle.hero[+i] = t.checked;
           else if (f === "value") {
             const l = state.lanes.find((x) => x.id === sel.id);
             if (l) l.value = +t.value || 0;
@@ -3000,7 +3385,6 @@
             }
           } else if (f === "pname") state.players[+i].name = t.value || "Player " + (+i + 1);
           else if (f === "pcolor") state.players[+i].color = t.value;
-          else if (f === "pfaction") state.players[+i].faction = t.value;
           else if (f === "pcredits") state.players[+i].credits = Math.max(0, Math.round(+t.value) || 0);
           else if (f === "rule") state.rules[i] = Math.max(0, +t.value || 0);
         });
