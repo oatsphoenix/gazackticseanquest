@@ -1008,18 +1008,31 @@ try {
         exit 4
     }
 
-    $w = 1920; $h = 1080
-    try { Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $w = $b.Width; $h = $b.Height } catch { }
+    # The display's real resolution and refresh rate, asked of the graphics adapter: with display
+    # scaling on, Windows tells ordinary programs a scaled-down size, which would start the game
+    # below the screen's own resolution.
+    $w = 0; $h = 0; $hz = 0
+    try {
+        $mode = Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.CurrentHorizontalResolution } |
+            Sort-Object { [int64]$_.CurrentHorizontalResolution * [int64]$_.CurrentVerticalResolution } -Descending | Select-Object -First 1
+        if ($mode) { $w = [int]$mode.CurrentHorizontalResolution; $h = [int]$mode.CurrentVerticalResolution; $hz = [int]$mode.CurrentRefreshRate }
+    } catch { }
+    if (-not $w) { try { Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $w = $b.Width; $h = $b.Height } catch { } }
+    if (-not $w) { $w = 1920; $h = 1080 }
+    # The game stops at 80 frames a second unless told a rate. Use the screen's, but no higher than
+    # 144: players report vehicles and AI misbehaving at very high rates.
+    if ($hz -lt 50) { $hz = 60 }
+    if ($hz -gt 144) { $hz = 144 }
 
-    # The options given to the game come from seanquest-launch-args.txt (first line that is not a
-    # comment), so they can be changed without touching this script.
-    $template = '/resolution {w} {h} {mission}'
+    # These options can be replaced by a line in seanquest-launch-args.txt (the first line there
+    # that is not a comment), without touching this script.
+    $template = '/resolution {w} {h} /fixedrate {hz} {mission}'
     $argsFile = Join-Path $here 'seanquest-launch-args.txt'
     if (Test-Path -LiteralPath $argsFile) {
         $line = Get-Content -LiteralPath $argsFile | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1
         if ($line) { $template = $line.Trim() }
     }
-    $gameArgs = $template.Replace('{w}', "$w").Replace('{h}', "$h").Replace('{mission}', $mission)
+    $gameArgs = $template.Replace('{w}', "$w").Replace('{h}', "$h").Replace('{hz}', "$hz").Replace('{mission}', $mission)
 
     # The Steam copy has to be started through Steam for its options to reach the game.
     $steamExe = $null
@@ -1043,11 +1056,23 @@ function Register-Launcher([string]$GameData) {
     $launcher = Join-Path $GameData 'seanquest-launch.ps1'
     Set-Content -LiteralPath $launcher -Value $LauncherSource -Encoding ASCII
     $argsFile = Join-Path $GameData 'seanquest-launch-args.txt'
-    if (-not (Test-Path -LiteralPath $argsFile)) {
+    # The options file only holds an override. One written by an earlier version of this script
+    # (its old default as the active line) is replaced, so the new defaults take effect.
+    $active = $null
+    if (Test-Path -LiteralPath $argsFile) {
+        $active = Get-Content -LiteralPath $argsFile | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1
+    }
+    if (-not (Test-Path -LiteralPath $argsFile) -or "$active".Trim() -eq '/resolution {w} {h} {mission}') {
         Set-Content -LiteralPath $argsFile -Encoding ASCII -Value @(
-            '# Options the launcher gives the game. {mission} is the mission code from the board,'
-            '# {w} and {h} are your screen size. Lines starting with # are ignored.'
-            '/resolution {w} {h} {mission}'
+            '# Options the launcher gives the game. Lines starting with # are ignored.'
+            '# With no other line here, the launcher uses:'
+            '#   /resolution {w} {h} /fixedrate {hz} {mission}'
+            '# {w} {h} = your screen''s own resolution, {hz} = its refresh rate (144 at most),'
+            '# {mission} = the mission code from the board.'
+            '#'
+            '# To change them, add a line without # below. Examples:'
+            '#   /resolution {w} {h} {mission}                 no frame-rate option: the game''s own 80 fps limit'
+            '#   /win /resolution 1920 1080 {mission}          in a window at a fixed size'
         )
     }
     try {
@@ -1056,7 +1081,10 @@ function Register-Launcher([string]$GameData) {
         Set-ItemProperty -Path $key -Name '(default)' -Value 'URL:GaZacktic Seanquest launcher'
         Set-ItemProperty -Path $key -Name 'URL Protocol' -Value ''
         Set-ItemProperty -Path "$key\shell\open\command" -Name '(default)' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`" `"%1`""
+        $mode = Get-DisplayMode
         Write-Ok 'Launcher installed: the board''s "Launch game" button can now start the game.'
+        Write-Info "It will start the game at $($mode.Width)x$($mode.Height) and $($mode.Hz) frames a second."
+        Write-Info 'For the frame rate to apply, turn V-Sync on once in the game: Options > Video.'
         Write-Info 'The first time, your browser asks whether to open the link; allow it.'
         return $true
     } catch {
@@ -1073,17 +1101,31 @@ function Unregister-Launcher([string]$GameData) {
     Write-Ok 'Launcher removed.'
 }
 
+# The display's real resolution and refresh rate (see the same lookup in the launcher).
+function Get-DisplayMode {
+    $w = 0; $h = 0; $hz = 0
+    try {
+        $mode = Get-CimInstance Win32_VideoController -ErrorAction Stop | Where-Object { $_.CurrentHorizontalResolution } |
+            Sort-Object { [int64]$_.CurrentHorizontalResolution * [int64]$_.CurrentVerticalResolution } -Descending | Select-Object -First 1
+        if ($mode) { $w = [int]$mode.CurrentHorizontalResolution; $h = [int]$mode.CurrentVerticalResolution; $hz = [int]$mode.CurrentRefreshRate }
+    } catch { }
+    if (-not $w) { try { Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $w = $b.Width; $h = $b.Height } catch { } }
+    if (-not $w) { $w = 1920; $h = 1080 }
+    if ($hz -lt 50) { $hz = 60 }
+    if ($hz -gt 144) { $hz = 144 }
+    return @{ Width = $w; Height = $h; Hz = $hz }
+}
+
 function New-GameShortcut([string]$GameData) {
     try {
-        Add-Type -AssemblyName System.Windows.Forms
-        $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $mode = Get-DisplayMode
         $shell = New-Object -ComObject WScript.Shell
         $link = $shell.CreateShortcut((Join-Path ([Environment]::GetFolderPath('Desktop')) 'Battlefront II (Seanquest).lnk'))
         $link.TargetPath = Join-Path $GameData 'BattlefrontII.exe'
         $link.WorkingDirectory = $GameData
-        $link.Arguments = "/resolution $($screen.Width) $($screen.Height)"
+        $link.Arguments = "/resolution $($mode.Width) $($mode.Height) /fixedrate $($mode.Hz)"
         $link.Save()
-        Write-Ok "Desktop shortcut created: Battlefront II (Seanquest), at $($screen.Width)x$($screen.Height)."
+        Write-Ok "Desktop shortcut created: Battlefront II (Seanquest), at $($mode.Width)x$($mode.Height), $($mode.Hz) Hz."
     } catch { Write-Warn "Could not create the desktop shortcut: $($_.Exception.Message)" }
 }
 

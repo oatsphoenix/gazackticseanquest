@@ -76,10 +76,16 @@ installs only the launcher. It is the same as `install-mods.bat -LauncherOnly`.
 install-mods.bat -TestLaunch cor1c_con
 ```
 
-That should start Battlefront II on Coruscant: Jedi Temple, Clone Wars, conquest. If the game opens to
-its normal menu instead, or not at all, the game is not taking the mission from the command line the way
-the launcher passes it. The options it passes are in `GameData\seanquest-launch-args.txt` and can be
-edited there.
+That should start Battlefront II on Coruscant: Jedi Temple, Clone Wars, conquest.
+
+The launcher starts the game at the screen's own resolution and refresh rate
+(`/resolution W H /fixedrate HZ`), read from the graphics adapter so display scaling does not lower it.
+The rate is held to 144 at most, because players report vehicles and AI misbehaving above that. Two
+things to know:
+
+- The frame rate only applies with **V-Sync turned on in the game** (Options > Video). Without a rate
+  the game stops at 80 frames a second.
+- To use different options, add a line to `GameData\seanquest-launch-args.txt`; the file explains how.
 
 ### The mission list
 
