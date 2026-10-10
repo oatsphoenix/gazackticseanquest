@@ -59,6 +59,28 @@ your clipboard; paste it when the installer asks for a folder.
 Every file it replaces is copied to `GameData\_seanquest_backup` first. Files replaced by a mod's own
 installer are not backed up; Steam's "Verify integrity of game files" restores those.
 
+## Launching battles from the game board
+
+The installer also sets up a small launcher so the board's **Launch game** button (on the battle card)
+can start the game on the right mission. It registers a `seanquest://` link type for your Windows user
+and puts `seanquest-launch.ps1` in `GameData`. The launcher only accepts a mission code in the game's
+own format, such as `cor1c_con`; any other link is refused and noted in `seanquest-launch.log`.
+
+**This is untested against the real game.** Try it first:
+
+```
+install-mods.bat -TestLaunch cor1c_con
+```
+
+That should start Battlefront II on Coruscant: Jedi Temple, Clone Wars, conquest. If the game opens to
+its normal menu instead, or not at all, the game is not taking the mission from the command line the way
+the launcher passes it. The options it passes are in `GameData\seanquest-launch-args.txt` and can be
+edited there.
+
+Mission codes are map + era letter (`c` Clone Wars, `g` Galactic Civil War) + mode (`_con`, `_ctf`,
+`_1flag`, `_hunt`, `_eli`, `_ass`). The board knows the stock maps' codes. Mod maps (the BF1 pack, the
+Xbox DLC) have their own, which you type into the board in edit mode once you know them.
+
 ## Options
 
 ```
@@ -66,6 +88,9 @@ install-mods.bat -Verify                    check the installed mods, install no
 install-mods.bat -Undo ai                   take one mod back out (also: -Undo xbox-dlc)
 install-mods.bat -MakeSetList               rewrite setlist.json from this PC's install
 install-mods.bat -NoSetList                 ignore the set list and choose mods freely
+install-mods.bat -TestLaunch cor1c_con      start the game on a mission through the launcher
+install-mods.bat -NoLauncher                install mods without the launcher
+install-mods.bat -RemoveLauncher            remove the launcher again
 install-mods.bat -Only bf1-maps,xbox-dlc    install just these
 install-mods.bat -Yes                       take the default set without the menu
 install-mods.bat -Force                     reinstall mods already installed

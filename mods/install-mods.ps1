@@ -29,6 +29,12 @@
   two players' installs identical: give the file to the other player (next to their install-mods.bat).
 .PARAMETER NoSetList
   Ignore any set list and choose mods freely.
+.PARAMETER NoLauncher
+  Do not install the launcher that lets the game board start the game on a chosen mission.
+.PARAMETER TestLaunch
+  Install the launcher if needed, then start the game on this mission code, e.g. -TestLaunch cor1c_con
+.PARAMETER RemoveLauncher
+  Remove the launcher (its seanquest:// link type and its script).
 #>
 [CmdletBinding()]
 param(
@@ -40,7 +46,10 @@ param(
     [switch]$Verify,
     [string[]]$Undo,
     [switch]$MakeSetList,
-    [switch]$NoSetList
+    [switch]$NoSetList,
+    [switch]$NoLauncher,
+    [string]$TestLaunch,
+    [switch]$RemoveLauncher
 )
 
 $ErrorActionPreference = 'Stop'
@@ -777,6 +786,89 @@ function Select-Mods($Installed) {
     return $chosen
 }
 
+# -----------------------------------------------------------------------------------------------
+# The launcher: lets the game board's "Launch game" button start the game on a chosen mission
+# -----------------------------------------------------------------------------------------------
+# The board opens a link like  seanquest://launch?mission=cor1c_con . Windows hands that link to the
+# script below, which lives in GameData. It accepts nothing but a mission code in the game's own
+# format, so a web page cannot use it to run anything else or pass other options to the game.
+$LauncherSource = @'
+param([string]$Url)
+# GaZacktic Seanquest launcher. Written by install-mods.ps1; safe to delete.
+$ErrorActionPreference = 'Stop'
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$log  = Join-Path $here 'seanquest-launch.log'
+function Note([string]$Text) { Add-Content -LiteralPath $log -Value ("{0}  {1}" -f (Get-Date).ToString('s'), $Text) }
+try {
+    if ("$Url" -cnotmatch '^seanquest://launch/?\?mission=([a-z0-9]{3,8}[cg]_[a-z0-9]{2,8})/?$') { Note "refused: $Url"; exit 2 }
+    $mission = $Matches[1]
+    if (Get-Process -Name 'BattlefrontII' -ErrorAction SilentlyContinue) { Note "the game is already running; not starting $mission"; exit 3 }
+
+    $w = 1920; $h = 1080
+    try { Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $w = $b.Width; $h = $b.Height } catch { }
+
+    # The options given to the game come from seanquest-launch-args.txt (first line that is not a
+    # comment), so they can be changed without touching this script.
+    $template = '/resolution {w} {h} {mission}'
+    $argsFile = Join-Path $here 'seanquest-launch-args.txt'
+    if (Test-Path -LiteralPath $argsFile) {
+        $line = Get-Content -LiteralPath $argsFile | Where-Object { $_.Trim() -and -not $_.Trim().StartsWith('#') } | Select-Object -First 1
+        if ($line) { $template = $line.Trim() }
+    }
+    $gameArgs = $template.Replace('{w}', "$w").Replace('{h}', "$h").Replace('{mission}', $mission)
+
+    # The Steam copy has to be started through Steam for its options to reach the game.
+    $steamExe = $null
+    if ($here -match 'steamapps') {
+        try { $steamExe = (Get-ItemProperty -Path 'HKCU:\Software\Valve\Steam' -ErrorAction Stop).SteamExe } catch { }
+    }
+    if ($steamExe -and (Test-Path -LiteralPath $steamExe)) {
+        Note "starting through Steam: -applaunch 6060 $gameArgs"
+        Start-Process -FilePath $steamExe -ArgumentList "-applaunch 6060 $gameArgs"
+    } else {
+        Note "starting: BattlefrontII.exe $gameArgs"
+        Start-Process -FilePath (Join-Path $here 'BattlefrontII.exe') -WorkingDirectory $here -ArgumentList $gameArgs
+    }
+} catch {
+    Note "error: $($_.Exception.Message)"
+    exit 1
+}
+'@
+
+function Register-Launcher([string]$GameData) {
+    $launcher = Join-Path $GameData 'seanquest-launch.ps1'
+    Set-Content -LiteralPath $launcher -Value $LauncherSource -Encoding ASCII
+    $argsFile = Join-Path $GameData 'seanquest-launch-args.txt'
+    if (-not (Test-Path -LiteralPath $argsFile)) {
+        Set-Content -LiteralPath $argsFile -Encoding ASCII -Value @(
+            '# Options the launcher gives the game. {mission} is the mission code from the board,'
+            '# {w} and {h} are your screen size. Lines starting with # are ignored.'
+            '/resolution {w} {h} {mission}'
+        )
+    }
+    try {
+        $key = 'HKCU:\Software\Classes\seanquest'
+        New-Item -Path "$key\shell\open\command" -Force | Out-Null
+        Set-ItemProperty -Path $key -Name '(default)' -Value 'URL:GaZacktic Seanquest launcher'
+        Set-ItemProperty -Path $key -Name 'URL Protocol' -Value ''
+        Set-ItemProperty -Path "$key\shell\open\command" -Name '(default)' -Value "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`" `"%1`""
+        Write-Ok 'Launcher installed: the board''s "Launch game" button can now start the game.'
+        Write-Info 'The first time, your browser asks whether to open the link; allow it.'
+        return $true
+    } catch {
+        Write-Warn "Could not register the seanquest:// link type: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Unregister-Launcher([string]$GameData) {
+    try { Remove-Item -Path 'HKCU:\Software\Classes\seanquest' -Recurse -Force -ErrorAction Stop } catch { }
+    foreach ($f in @('seanquest-launch.ps1', 'seanquest-launch-args.txt', 'seanquest-launch.log')) {
+        Remove-Item -LiteralPath (Join-Path $GameData $f) -Force -ErrorAction SilentlyContinue
+    }
+    Write-Ok 'Launcher removed.'
+}
+
 function New-GameShortcut([string]$GameData) {
     try {
         Add-Type -AssemblyName System.Windows.Forms
@@ -829,6 +921,18 @@ function Invoke-Main {
 
     $script:Installed = $installed
     $script:Clashes = @()
+
+    if ($RemoveLauncher) { Write-Step 'Removing the launcher'; Unregister-Launcher $gameData; return }
+    if ($TestLaunch) {
+        Write-Step "Test launch: $TestLaunch"
+        if ($TestLaunch -cnotmatch '^[a-z0-9]{3,8}[cg]_[a-z0-9]{2,8}$') { Stop-Script 'That is not a mission code. Example: cor1c_con (Coruscant, Clone Wars, conquest).' }
+        if (-not (Register-Launcher $gameData)) { return }
+        Write-Info 'Opening the same link the board uses. The game should start on that mission.'
+        Start-Process "seanquest://launch?mission=$TestLaunch"
+        Write-Info "If nothing happens, look at: $(Join-Path $gameData 'seanquest-launch.log')"
+        return
+    }
+
     $script:SetList = Read-SetList
 
     if ($MakeSetList) {
@@ -917,6 +1021,7 @@ function Invoke-Main {
     }
 
     if (-not $NoShortcut) { Write-Step 'Shortcut'; New-GameShortcut $gameData }
+    if (-not $NoLauncher) { Write-Step 'Game launcher'; [void](Register-Launcher $gameData) }
 
     Write-Step 'Summary'
     foreach ($r in $results) { Write-Info ("{0,-10} {1}" -f $r.Status, $r.Mod.Name) }
