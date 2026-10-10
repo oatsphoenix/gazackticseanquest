@@ -81,6 +81,21 @@ its normal menu instead, or not at all, the game is not taking the mission from 
 the launcher passes it. The options it passes are in `GameData\seanquest-launch-args.txt` and can be
 edited there.
 
+### The mission list
+
+Not every map has every mode in every era, and the game quietly loads a different map when it is asked
+for a mission it does not have. Two things guard against that:
+
+- `install-mods.bat -ScanMissions` reads the real mission names out of the game's `mission.lvl` files,
+  mods included, and opens the board with that list. The board then only offers eras and modes that
+  exist for each map, and marks a mission that is not in the list. It also runs after an install and
+  after `install-launcher.bat`. The names found are saved to `GameData\seanquest-missions.txt`.
+- The launcher checks the same files before starting the game and refuses a mission that is not there,
+  with a message on screen.
+
+The scan is also how to find the codes of mod maps: they show up in the list and as suggestions in the
+board's mission code box (edit mode).
+
 Mission codes are map + era letter (`c` Clone Wars, `g` Galactic Civil War) + mode (`_con`, `_ctf`,
 `_1flag`, `_hunt`, `_eli`, `_ass`). The board knows the stock maps' codes. Mod maps (the BF1 pack, the
 Xbox DLC) have their own, which you type into the board in edit mode once you know them.
@@ -93,6 +108,7 @@ install-mods.bat -Undo ai                   take one mod back out (also: -Undo x
 install-mods.bat -MakeSetList               rewrite setlist.json from this PC's install
 install-mods.bat -NoSetList                 ignore the set list and choose mods freely
 install-mods.bat -TestLaunch cor1c_con      start the game on a mission through the launcher
+install-mods.bat -ScanMissions              read the game's real mission list and give it to the board
 install-mods.bat -LauncherOnly              install only the launcher
 install-mods.bat -NoLauncher                install mods without the launcher
 install-mods.bat -RemoveLauncher            remove the launcher again

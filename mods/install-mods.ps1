@@ -35,6 +35,9 @@
   Install the launcher if needed, then start the game on this mission code, e.g. -TestLaunch cor1c_con
 .PARAMETER RemoveLauncher
   Remove the launcher (its seanquest:// link type and its script).
+.PARAMETER ScanMissions
+  Read the game's real mission list (which maps, eras and modes exist, mods included) and open the
+  game board with it, so battles only offer missions this install actually has.
 .PARAMETER LauncherOnly
   Install just the launcher and touch nothing else. This is what install-launcher.bat runs.
 #>
@@ -52,7 +55,8 @@ param(
     [switch]$NoLauncher,
     [string]$TestLaunch,
     [switch]$RemoveLauncher,
-    [switch]$LauncherOnly
+    [switch]$LauncherOnly,
+    [switch]$ScanMissions
 )
 
 $ErrorActionPreference = 'Stop'
@@ -897,6 +901,69 @@ function Select-Mods($Installed) {
 }
 
 # -----------------------------------------------------------------------------------------------
+# The mission list: which missions this install really has
+# -----------------------------------------------------------------------------------------------
+# A mission is named map + era letter + mode, e.g. cor1g_con. Not every map has every mode, and the
+# game quietly loads a different map when asked for one that does not exist. The names are stored as
+# plain text inside the game's mission.lvl (and each mod's own mission.lvl), so they can be read out.
+$BoardUrl = 'https://oatsphoenix.github.io/gazackticseanquest/'
+
+function Get-MissionNames([string]$GameData) {
+    $files = @()
+    $stock = [IO.Path]::Combine($GameData, 'data', '_lvl_pc', 'mission.lvl')
+    if (Test-Path -LiteralPath $stock) { $files += $stock }
+    $addon = [IO.Path]::Combine($GameData, 'addon')
+    if (Test-Path -LiteralPath $addon) {
+        $files += @(Get-ChildItem -LiteralPath $addon -Recurse -File -Filter 'mission.lvl' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    }
+    $latin = [Text.Encoding]::GetEncoding(28591)   # one byte per character, so nothing is lost
+    $pattern = [regex]'(?i)(?<![a-z0-9_])[a-z][a-z0-9]{1,7}[cg]_(?:con|ctf|1flag|hunt|eli|ass|xl)(?![a-z0-9_])'
+    $names = @{}
+    foreach ($file in $files) {
+        try {
+            $text = $latin.GetString([IO.File]::ReadAllBytes($file))
+            foreach ($m in $pattern.Matches($text)) { $names[$m.Value.ToLowerInvariant()] = $true }
+        } catch { Write-Warn "Could not read $file : $($_.Exception.Message)" }
+    }
+    $list = [string[]]@($names.Keys)
+    [Array]::Sort($list, [StringComparer]::Ordinal)
+    return $list
+}
+
+# Packs the names for the board as  cor1:c.con.ctf,g.con.ctf;tat2:c.con...
+function ConvertTo-MissionList($Names) {
+    $maps = [ordered]@{}
+    foreach ($name in @($Names)) {
+        $m = [regex]::Match($name, '^(.+)([cg])_([a-z0-9]+)$')
+        if (-not $m.Success) { continue }
+        $code = $m.Groups[1].Value; $era = $m.Groups[2].Value
+        if (-not $maps.Contains($code)) { $maps[$code] = [ordered]@{} }
+        if (-not $maps[$code].Contains($era)) { $maps[$code][$era] = @() }
+        $maps[$code][$era] += $m.Groups[3].Value
+    }
+    $parts = foreach ($code in $maps.Keys) {
+        $eras = foreach ($era in $maps[$code].Keys) { $era + '.' + ($maps[$code][$era] -join '.') }
+        $code + ':' + ($eras -join ',')
+    }
+    return @{ Text = ($parts -join ';'); Maps = $maps.Count }
+}
+
+function Send-MissionList([string]$GameData) {
+    $names = @(Get-MissionNames $GameData)
+    if (-not ($names -contains 'cor1c_con')) {
+        Write-Warn "Could not read the mission list from this install (found $($names.Count) names, and not the stock Coruscant one)."
+        Write-Warn 'The board will keep offering every mode. Tell the project about this.'
+        return $false
+    }
+    $packed = ConvertTo-MissionList $names
+    Set-Content -LiteralPath ([IO.Path]::Combine($GameData, 'seanquest-missions.txt')) -Value $names -Encoding ASCII
+    Write-Ok "Found $($names.Count) missions on $($packed.Maps) maps. The full list is in GameData\seanquest-missions.txt"
+    Write-Info 'Opening the game board with this list. Battles will then only offer eras and modes that exist.'
+    Start-Process ($BoardUrl + '#missions=' + $packed.Text)
+    return $true
+}
+
+# -----------------------------------------------------------------------------------------------
 # The launcher: lets the game board's "Launch game" button start the game on a chosen mission
 # -----------------------------------------------------------------------------------------------
 # The board opens a link like  seanquest://launch?mission=cor1c_con . Windows hands that link to the
@@ -913,6 +980,33 @@ try {
     if ("$Url" -cnotmatch '^seanquest://launch/?\?mission=([a-z0-9]{3,8}[cg]_[a-z0-9]{2,8})/?$') { Note "refused: $Url"; exit 2 }
     $mission = $Matches[1]
     if (Get-Process -Name 'BattlefrontII' -ErrorAction SilentlyContinue) { Note "the game is already running; not starting $mission"; exit 3 }
+
+    # The game loads a different map when asked for a mission it does not have, so check first. The
+    # names are plain text in mission.lvl. If even the stock Coruscant mission cannot be seen there,
+    # the check itself is not working on this install and is skipped.
+    $known = $null
+    try {
+        $latin = [Text.Encoding]::GetEncoding(28591)
+        $files = @([IO.Path]::Combine($here, 'data', '_lvl_pc', 'mission.lvl'))
+        $addon = [IO.Path]::Combine($here, 'addon')
+        if (Test-Path -LiteralPath $addon) { $files += @(Get-ChildItem -LiteralPath $addon -Recurse -File -Filter 'mission.lvl' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }) }
+        $sawStock = $false
+        foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) { continue }
+            $text = $latin.GetString([IO.File]::ReadAllBytes($file))
+            if ($text.IndexOf('cor1c_con', [StringComparison]::OrdinalIgnoreCase) -ge 0) { $sawStock = $true }
+            if ($text.IndexOf($mission, [StringComparison]::OrdinalIgnoreCase) -ge 0) { $known = $true; break }
+        }
+        if ($known -ne $true -and $sawStock) { $known = $false }
+    } catch { Note "could not check the mission list: $($_.Exception.Message)" }
+    if ($known -eq $false) {
+        Note "refused: this install has no mission $mission"
+        try {
+            Add-Type -AssemblyName System.Windows.Forms
+            [void][System.Windows.Forms.MessageBox]::Show("This copy of Battlefront II has no mission called $mission.`n`nThat map probably does not have this mode in this era. Nothing was started.`n`nPick another mode on the battle card.", 'GaZacktic Seanquest launcher', 'OK', 'Warning')
+        } catch { }
+        exit 4
+    }
 
     $w = 1920; $h = 1080
     try { Add-Type -AssemblyName System.Windows.Forms; $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $w = $b.Width; $h = $b.Height } catch { }
@@ -1017,6 +1111,7 @@ function Invoke-Main {
         if ($Force) { $argList += '-Force' }
         if ($NoShortcut) { $argList += '-NoShortcut' }
         if ($LauncherOnly) { $argList += '-LauncherOnly' }
+        if ($ScanMissions) { $argList += '-ScanMissions' }
         if ($NoLauncher) { $argList += '-NoLauncher' }
         if ($TestLaunch) { $argList += '-TestLaunch'; $argList += $TestLaunch }
         if ($Only) { $argList += '-Only'; $argList += ($Only -join ',') }
@@ -1037,7 +1132,14 @@ function Invoke-Main {
 
     if ($LauncherOnly) {
         Write-Step 'Game launcher'
-        if (Register-Launcher $gameData) { Write-Info 'Go back to the game board and press Launch game again.' }
+        [void](Register-Launcher $gameData)
+        Write-Step 'Mission list'
+        [void](Send-MissionList $gameData)
+        return
+    }
+    if ($ScanMissions) {
+        Write-Step 'Mission list'
+        [void](Send-MissionList $gameData)
         return
     }
     if ($RemoveLauncher) { Write-Step 'Removing the launcher'; Unregister-Launcher $gameData; return }
@@ -1140,6 +1242,9 @@ function Invoke-Main {
 
     if (-not $NoShortcut) { Write-Step 'Shortcut'; New-GameShortcut $gameData }
     if (-not $NoLauncher) { Write-Step 'Game launcher'; [void](Register-Launcher $gameData) }
+    # the mods just installed add missions, so hand the board the new list
+    Write-Step 'Mission list'
+    [void](Send-MissionList $gameData)
 
     Write-Step 'Summary'
     foreach ($r in $results) { Write-Info ("{0,-10} {1}" -f $r.Status, $r.Mod.Name) }

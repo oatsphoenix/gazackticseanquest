@@ -631,6 +631,7 @@
           </button>
         </div>
         <div class="hint">Saved automatically in this browser. Export a file to share the board.</div>
+        <div class="hint" id="missionInfo"></div>
         <input type="file" id="file" accept=".json,application/json" hidden />
       </details>
     </aside>
@@ -641,6 +642,7 @@
       </div>
       <div id="logBody"></div>
     </div>
+    <datalist id="codes"></datalist>
     <div id="toast"></div>
     <div id="modal"><div id="modalBox" class="panel"></div></div>
     <div id="err"></div>
@@ -745,6 +747,60 @@
         ["spa6", "c", "Space Felucia"],
         ["spa7", "c", "Space Mygeeto"],
       ];
+      // The mission list of a real game install, loaded from the mod installer's scan
+      // (install-mods.bat -ScanMissions). It says which map codes exist and which eras and modes each
+      // one really has:  state.missions = { cor1: { c: ["con", "ctf"], g: ["con", "ctf"] }, ... }
+      // Until one is loaded the board offers every mode and cannot tell a real mission from a wrong one.
+      const MISSIONS_KEY = "gazacktic-seanquest.missions";
+      function cleanMissions(obj) {
+        const out = {};
+        if (obj && typeof obj === "object")
+          for (const code of Object.keys(obj)) {
+            if (!/^[a-z0-9]{2,8}$/.test(code)) continue;
+            const eras = {};
+            for (const e of ["c", "g"]) {
+              const modes = Array.isArray(obj[code][e])
+                ? obj[code][e].filter((x) => /^[a-z0-9]{1,8}$/.test(x))
+                : [];
+              if (modes.length) eras[e] = modes;
+            }
+            if (Object.keys(eras).length) out[code] = eras;
+          }
+        return Object.keys(out).length ? out : null;
+      }
+      // The installer hands the list over in the page address as  cor1:c.con.ctf,g.con;tat2:c.con...
+      function parseMissionList(text) {
+        const obj = {};
+        for (const part of String(text).toLowerCase().split(";")) {
+          const m = /^([a-z0-9]{2,8}):(.+)$/.exec(part.trim());
+          if (!m) continue;
+          obj[m[1]] = {};
+          for (const e of m[2].split(",")) {
+            const bits = e.split(".");
+            if (bits.length > 1) obj[m[1]][bits[0]] = bits.slice(1);
+          }
+        }
+        return cleanMissions(obj);
+      }
+      const catalogOf = (code) => (state.missions && code ? state.missions[code] || null : null);
+      // "ok", "missing", or "" when no mission list is loaded so nothing can be said.
+      function missionStatus(mission) {
+        if (!state.missions || !mission) return "";
+        const m = /^(.+)([cg])_([a-z0-9]+)$/.exec(mission),
+          cat = m && state.missions[m[1]];
+        return cat && cat[m[2]] && cat[m[2]].includes(m[3]) ? "ok" : "missing";
+      }
+      // Space maps for an era: from the mission list when there is one, else the stock ones.
+      function spaceMapsFor(era) {
+        const stock = SPACE_MAPS.filter((s) => s[1] === era).map((s) => [s[0], s[2]]);
+        if (!state.missions) return stock;
+        const real = Object.keys(state.missions)
+          .filter((code) => (state.missions[code][era] || []).includes("ass"))
+          .sort()
+          .map((code) => [code, (SPACE_MAPS.find((s) => s[0] === code) || [0, 0, "Space map " + code])[2]]);
+        return real.length ? real : stock;
+      }
+
       // Give a map its mission code and eras if it has none yet (new boards and older saved games).
       function fillMapCode(planetName, m) {
         if (typeof m.code !== "string") {
@@ -904,6 +960,8 @@
         s.ply = +s.ply || 0;
         s.phase = s.phase === "draft" ? "draft" : "play";
         s.sides = { c: s.sides && s.sides.c === 1 ? 1 : 0, g: s.sides && s.sides.g === 1 ? 1 : 0 };
+        s.missions = cleanMissions(s.missions);
+        s.missionsAt = s.missions ? +s.missionsAt || 0 : 0;
         const b = s.battle,
           bn = b && s.nodes.find((n) => n.id === b.node);
         if (!bn || (bn.kind === "planet" && !bn.maps[b.map])) s.battle = null;
@@ -1146,17 +1204,33 @@
         const n = nodeById(b.node);
         if (b.map < 0) return b.space ? b.space + b.era + "_ass" : "";
         const m = n.maps[b.map];
-        return m.code ? m.code + b.era + "_" + b.mode : "";
+        return m.code ? m.code + b.era + "_" + battleMode(b) : "";
       }
+      // Eras this battle can be fought in: what the game really has for the map, when that is known.
       function battleEras(b) {
-        const n = nodeById(b.node);
-        return b.map < 0 ? "cg" : n.maps[b.map].eras;
+        if (b.map < 0) return "cg";
+        const m = nodeById(b.node).maps[b.map],
+          cat = catalogOf(m.code);
+        return (cat && ["c", "g"].filter((e) => cat[e]).join("")) || m.eras;
+      }
+      // Modes on offer: only the ones the game has for this map and era, when that is known.
+      function battleModes(b) {
+        if (b.map < 0) return [["ass", "Space assault"]];
+        const cat = catalogOf(nodeById(b.node).maps[b.map].code),
+          real = cat && b.era && cat[b.era] ? MODES.filter((x) => cat[b.era].includes(x[0])) : [];
+        return real.length ? real : MODES;
+      }
+      // The chosen mode, or the first one on offer if the chosen one does not exist for this map.
+      function battleMode(b) {
+        const modes = battleModes(b);
+        return modes.some((x) => x[0] === b.mode) ? b.mode : modes[0][0];
       }
       function setBattleEra(b, era, die) {
         b.era = era;
         b.die = die || 0;
-        if (b.map < 0 && !SPACE_MAPS.some((s) => s[0] === b.space && s[1] === era))
-          b.space = SPACE_MAPS.find((s) => s[1] === era)[0];
+        const spaces = spaceMapsFor(era);
+        if (b.map < 0 && !spaces.some((s) => s[0] === b.space)) b.space = spaces[0][0];
+        if (b.map >= 0) b.mode = battleMode(b);
       }
       // Opens the battle card for a map (or for a space point when mapIdx is -1).
       function startBattle(node, mapIdx) {
@@ -2466,7 +2540,7 @@
                 i +
                 '" value="' +
                 esc(m.code) +
-                '" placeholder="e.g. cor1" title="The map part of the game\'s mission code, without era or mode">Eras<select data-f="maperas" data-i="' +
+                '" list="codes" placeholder="e.g. cor1" title="The map part of the game\'s mission code, without era or mode">Eras<select data-f="maperas" data-i="' +
                 i +
                 '">' +
                 [
@@ -3044,7 +3118,9 @@
           m = b.map >= 0 ? n.maps[b.map] : null,
           eras = battleEras(b),
           mission = battleMission(b),
-          modeName = b.map < 0 ? "Space assault" : (MODES.find((x) => x[0] === b.mode) || ["", b.mode])[1];
+          status = missionStatus(mission),
+          modeName =
+            b.map < 0 ? "Space assault" : (MODES.find((x) => x[0] === battleMode(b)) || ["", b.mode])[1];
         const eraBtn = (e) =>
           '<button class="btn' +
           (b.era === e ? " on" : "") +
@@ -3075,7 +3151,7 @@
             '<div class="row" style="margin-top:10px"><label>Space map</label><select data-f="bspace"' +
             (b.era ? "" : " disabled") +
             ">" +
-            SPACE_MAPS.filter((s) => s[1] === b.era)
+            (b.era ? spaceMapsFor(b.era) : [])
               .map(
                 (s) =>
                   '<option value="' +
@@ -3083,7 +3159,7 @@
                   '"' +
                   (b.space === s[0] ? " selected" : "") +
                   ">" +
-                  s[2] +
+                  s[1] +
                   "</option>",
               )
               .join("") +
@@ -3091,16 +3167,18 @@
         else
           h +=
             '<div class="row" style="margin-top:10px"><label>Mode</label><select data-f="bmode">' +
-            MODES.map(
-              (x) =>
-                '<option value="' +
-                x[0] +
-                '"' +
-                (b.mode === x[0] ? " selected" : "") +
-                ">" +
-                x[1] +
-                "</option>",
-            ).join("") +
+            battleModes(b)
+              .map(
+                (x) =>
+                  '<option value="' +
+                  x[0] +
+                  '"' +
+                  (battleMode(b) === x[0] ? " selected" : "") +
+                  ">" +
+                  x[1] +
+                  "</option>",
+              )
+              .join("") +
             "</select></div>";
         if (b.era) {
           h += '<div class="mlabel">Sides in the ' + ERA_NAMES[b.era] + "</div>";
@@ -3149,11 +3227,22 @@
             '<button class="btn" data-act="bswap" title="For a commander who has bought a faction pick">Swap sides</button>';
         }
         h +=
-          '<div class="mlabel">Mission</div><div class="row"><span class="code">' +
+          '<div class="mlabel">Mission</div><div class="row"><span class="code"' +
+          (status === "missing" ? ' style="color:#ff6a5a"' : "") +
+          ">" +
           (mission || (b.era ? "no mission code set for this map" : "pick or roll the era first")) +
-          "</span></div>" +
+          "</span>" +
+          (status === "missing"
+            ? '<span style="color:#ff6a5a">is not in the scanned game. Starting it would load a different map.</span>'
+            : status === "ok"
+              ? '<span style="color:var(--dim)">found in the scanned game</span>'
+              : "") +
+          "</div>" +
+          (state.missions
+            ? ""
+            : '<div class="hint" style="min-height:0;margin:0 0 6px">These modes are not checked against your game yet, and a mode the map does not have loads a different map. Run <b>install-mods.bat -ScanMissions</b> once to load the real list.</div>') +
           '<div class="grid"><button class="btn on" data-act="launch"' +
-          (mission ? "" : " disabled") +
+          (mission && status !== "missing" ? "" : " disabled") +
           ' title="Starts Battlefront II on this mission. Needs the launcher installed on this PC; you are offered it if it is missing.">Launch game</button>' +
           '<button class="btn" data-act="bcopy"' +
           (mission ? "" : " disabled") +
@@ -3182,7 +3271,7 @@
             esc(
               m
                 ? n.name + ": " + m.name
-                : (SPACE_MAPS.find((s) => s[0] === b.space) || ["", "", "the space map"])[2],
+                : (spaceMapsFor(b.era).find((s) => s[0] === b.space) || ["", "the space map"])[1],
             ) +
             "</b>, " +
             ERA_NAMES[b.era] +
@@ -3297,6 +3386,13 @@
           .forEach((b) => b.classList.toggle("on", b.dataset.act === "tool:" + tool));
         $("hint").textContent =
           HINTS[tool] + (tool === "lane" && laneStart ? " Now click the second node." : "");
+        const codes = state.missions ? Object.keys(state.missions).sort() : [];
+        $("codes").innerHTML = codes.map((c) => '<option value="' + c + '">').join("");
+        $("missionInfo").textContent = codes.length
+          ? "Mission list loaded: " +
+            codes.length +
+            " maps from a real game install. Battles only offer eras and modes that exist."
+          : "No mission list loaded. Run install-mods.bat -ScanMissions on a PC with the game to load it.";
         RULES.forEach((r) => {
           const i = $("rule-" + r[0]);
           if (document.activeElement !== i) i.value = state.rules[r[0]];
@@ -3620,6 +3716,43 @@
 
       resize();
       syncScene();
+      // The installer's scan opens this page with the mission list in the address. It is kept under its
+      // own storage key as well, so a board already open in another tab picks it up and, if that
+      // board is online, passes it to the other player.
+      function adoptMissions(packed, announce) {
+        const list = packed && cleanMissions(packed.list);
+        if (!list || (state.missionsAt || 0) >= packed.at) return false;
+        const apply = () => {
+          state.missions = list;
+          state.missionsAt = packed.at;
+          log("Mission list loaded from a game install: " + Object.keys(list).length + " maps");
+        };
+        if (announce) {
+          mutate(apply);
+          toast("Mission list loaded: " + Object.keys(list).length + " maps");
+        } else {
+          apply();
+          save();
+        }
+        return true;
+      }
+      const hashList = /^#missions=(.+)$/.exec(location.hash);
+      if (hashList) {
+        const list = parseMissionList(decodeURIComponent(hashList[1]));
+        history.replaceState(null, "", location.pathname + location.search);
+        if (list) localStorage.setItem(MISSIONS_KEY, JSON.stringify({ at: Date.now(), list }));
+      }
+      const readStoredMissions = () => {
+        try {
+          return JSON.parse(localStorage.getItem(MISSIONS_KEY));
+        } catch (e) {
+          return null;
+        }
+      };
+      const loadedList = adoptMissions(readStoredMissions(), false);
+      addEventListener("storage", (e) => {
+        if (e.key === MISSIONS_KEY) adoptMissions(readStoredMissions(), true);
+      });
       // A link with ?room=CODE joins that room; a host that reloads reopens its room.
       const joinRoom = new URLSearchParams(location.search).get("room");
       let hosted = null;
@@ -3630,8 +3763,14 @@
         modal = { kind: "online", seat: 0, room: joinRoom };
         netJoin(joinRoom);
       } else if (hosted && hosted.room) netHost(hosted.seat === 1 ? 1 : 0, hosted.room);
-      else if (fresh) openNewGame();
+      else if (fresh && !hashList) openNewGame();
       renderUI();
+      if (hashList)
+        toast(
+          loadedList
+            ? "Mission list loaded: " + Object.keys(state.missions).length + " maps"
+            : "That mission list could not be read",
+        );
       requestAnimationFrame(frame);
     </script>
   </body>
