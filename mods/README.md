@@ -5,9 +5,14 @@ version of the 2005 game. It does not work with the Classic Collection re-releas
 
 ## Run it
 
-1. Download `install-mods.bat` and `install-mods.ps1` into the same folder.
-2. Double-click `install-mods.bat`.
-3. Pick the mods (the defaults are the recommended set) and press Enter.
+1. Download [`install-launcher.bat`](https://oatsphoenix.github.io/gazackticseanquest/mods/install-launcher.bat).
+   It is the only file you need; it fetches the current installer script itself each time it runs.
+2. Double-click it. If Windows asks whether to run it, choose Run (or More info, then Run anyway).
+3. It sets up the game launcher first, then shows the mod menu. Press Enter to install the ticked
+   mods (the defaults are the recommended set), or N to skip the mods.
+4. Last, it reads the game's mission list and opens the game board with it.
+
+Downloads and `setlist.json` are kept in the folder `install-launcher.bat` is in.
 
 Both players run it. The set list (below) is what guarantees the two installs come out the same.
 
@@ -15,7 +20,7 @@ Both players run it. The set list (below) is what guarantees the two installs co
 
 1. **Player 1** runs the installer. At the end it writes `setlist.json` next to the script and shows a
    set code such as `D530-2A33`.
-2. Player 1 sends `setlist.json` to player 2, who puts it next to their `install-mods.bat` **before**
+2. Player 1 sends `setlist.json` to player 2, who puts it next to their `install-launcher.bat` **before**
    running it.
 3. **Player 2** runs the installer. With a set list present it:
    - installs exactly the mods on the list (no menu),
@@ -25,7 +30,7 @@ Both players run it. The set list (below) is what guarantees the two installs co
 `MATCH` with the same set code on both PCs means every file in the game's mod folders (`addon` and
 `data\_lvl_pc`) is identical. `MISMATCH` lists the files that are missing, extra or different.
 
-`install-mods.bat -Verify` repeats the comparison at any time, for example before a session.
+`install-launcher.bat -Verify` repeats the comparison at any time, for example before a session.
 
 If a `setlist.json` is published in this folder of the project, the script fetches it by itself and
 step 2 is not needed.
@@ -54,7 +59,7 @@ your clipboard; paste it when the installer asks for a folder.
   that mod should contain. A file that fails is not installed.
 - **After installing:** that the mod's files are in the game folder. An installer that changed nothing
   is reported as failed.
-- **Any time later:** `install-mods.bat -Verify` re-checks everything it installed.
+- **Any time later:** `install-launcher.bat -Verify` re-checks everything it installed.
 
 Every file it replaces is copied to `GameData\_seanquest_backup` first. Files replaced by a mod's own
 installer are not backed up; Steam's "Verify integrity of game files" restores those.
@@ -67,13 +72,13 @@ and puts `seanquest-launch.ps1` in `GameData`. The launcher only accepts a missi
 own format, such as `cor1c_con`; any other link is refused and noted in `seanquest-launch.log`.
 
 If the launcher is not on a PC, the board notices when you press Launch game (nothing responds) and
-offers `install-launcher.bat`. That one file fetches the current installer script from this project and
-installs only the launcher. It is the same as `install-mods.bat -LauncherOnly`.
+offers `install-launcher.bat`. `install-launcher.bat -LauncherOnly` installs the launcher and reads the
+mission list without showing the mod menu.
 
 **This is untested against the real game.** Try it first:
 
 ```
-install-mods.bat -TestLaunch cor1c_con
+install-launcher.bat -TestLaunch cor1c_con
 ```
 
 That should start Battlefront II on Coruscant: Jedi Temple, Clone Wars, conquest.
@@ -92,7 +97,7 @@ things to know:
 Not every map has every mode in every era, and the game quietly loads a different map when it is asked
 for a mission it does not have. Two things guard against that:
 
-- `install-mods.bat -ScanMissions` reads the real mission names out of the game's `mission.lvl` files,
+- `install-launcher.bat -ScanMissions` reads the real mission names out of the game's `mission.lvl` files,
   mods included, and opens the board with that list. The board then only offers eras and modes that
   exist for each map, and marks a mission that is not in the list. It also runs after an install and
   after `install-launcher.bat`. The names found are saved to `GameData\seanquest-missions.txt`.
@@ -109,19 +114,19 @@ Xbox DLC) have their own, which you type into the board in edit mode once you kn
 ## Options
 
 ```
-install-mods.bat -Verify                    check the installed mods, install nothing
-install-mods.bat -Undo ai                   take one mod back out (also: -Undo xbox-dlc)
-install-mods.bat -MakeSetList               rewrite setlist.json from this PC's install
-install-mods.bat -NoSetList                 ignore the set list and choose mods freely
-install-mods.bat -TestLaunch cor1c_con      start the game on a mission through the launcher
-install-mods.bat -ScanMissions              read the game's real mission list and give it to the board
-install-mods.bat -LauncherOnly              install only the launcher
-install-mods.bat -NoLauncher                install mods without the launcher
-install-mods.bat -RemoveLauncher            remove the launcher again
-install-mods.bat -Only bf1-maps,xbox-dlc    install just these
-install-mods.bat -Yes                       take the default set without the menu
-install-mods.bat -Force                     reinstall mods already installed
-install-mods.bat -GamePath "D:\Games\Star Wars Battlefront II\GameData"
+install-launcher.bat -Verify                    check the installed mods, install nothing
+install-launcher.bat -Undo ai                   take one mod back out (also: -Undo xbox-dlc)
+install-launcher.bat -MakeSetList               rewrite setlist.json from this PC's install
+install-launcher.bat -NoSetList                 ignore the set list and choose mods freely
+install-launcher.bat -TestLaunch cor1c_con      start the game on a mission through the launcher
+install-launcher.bat -ScanMissions              read the game's real mission list and give it to the board
+install-launcher.bat -LauncherOnly              install only the launcher
+install-launcher.bat -NoLauncher                install mods without the launcher
+install-launcher.bat -RemoveLauncher            remove the launcher again
+install-launcher.bat -Only bf1-maps,xbox-dlc    install just these
+install-launcher.bat -Yes                       take the default set without the menu
+install-launcher.bat -Force                     reinstall mods already installed
+install-launcher.bat -GamePath "D:\Games\Star Wars Battlefront II\GameData"
 ```
 
 ## Galactic Conquest bonuses in any match
@@ -139,9 +144,9 @@ With `remaster-ui` (or `patch-1.3`) installed: pause the match, open **Fake Cons
   including the four the DLC also ships. The DLC goes on second for Kit Fisto, Asajj Ventress and the
   official versions of those four maps. If both mods want the same addon folder, the BF1 pack's copy is
   kept and the clash is reported. The DLC's author warns it may clash with BF1 packs in other ways; if
-  maps are doubled or the game crashes, run `install-mods.bat -Undo xbox-dlc`.
+  maps are doubled or the game crashes, run `install-launcher.bat -Undo xbox-dlc`.
 - **AI mod.** It replaces a core game file. If stock maps misbehave after installing it, run
-  `install-mods.bat -Undo ai`, which puts the original file back.
+  `install-launcher.bat -Undo ai`, which puts the original file back.
 - `-Undo` only works for mods the script copied in itself. The two mods with their own installers
   (`hd-graphics`, `remaster-ui`) are removed with Steam's "Verify integrity of game files".
 - The install order (HD graphics, then the interface mod, then maps, then Shader Patch) follows

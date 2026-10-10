@@ -7,7 +7,7 @@
   ModDB downloads (ModDB blocks scripted downloads, so your browser does those), then installs
   everything in the right order. Every file it replaces is copied to a backup folder first.
 
-  Run it from install-mods.bat, or:  powershell -ExecutionPolicy Bypass -File install-mods.ps1
+  Run it from install-launcher.bat, or:  powershell -ExecutionPolicy Bypass -File install-mods.ps1
 
 .PARAMETER GamePath
   The game's GameData folder (the one holding BattlefrontII.exe). Found automatically if omitted.
@@ -26,7 +26,7 @@
   in itself; a mod that used its own installer has to be removed with Steam's file verification.
 .PARAMETER MakeSetList
   Write setlist.json from this PC's install, replacing any existing one. The set list is what makes
-  two players' installs identical: give the file to the other player (next to their install-mods.bat).
+  two players' installs identical: give the file to the other player (next to their install-launcher.bat).
 .PARAMETER NoSetList
   Ignore any set list and choose mods freely.
 .PARAMETER NoLauncher
@@ -35,6 +35,9 @@
   Install the launcher if needed, then start the game on this mission code, e.g. -TestLaunch cor1c_con
 .PARAMETER RemoveLauncher
   Remove the launcher (its seanquest:// link type and its script).
+.PARAMETER HomeDir
+  Folder to keep downloads and setlist.json in. install-launcher.bat passes its own folder, so the
+  set list sits next to the .bat. Defaults to the folder this script is in.
 .PARAMETER ScanMissions
   Read the game's real mission list (which maps, eras and modes exist, mods included) and open the
   game board with it, so battles only offer missions this install actually has.
@@ -56,7 +59,8 @@ param(
     [string]$TestLaunch,
     [switch]$RemoveLauncher,
     [switch]$LauncherOnly,
-    [switch]$ScanMissions
+    [switch]$ScanMissions,
+    [string]$HomeDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -68,8 +72,11 @@ if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object
 if ($Undo) { $Undo = @($Undo | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 
 $Root        = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DownloadDir = Join-Path $Root 'downloads'
-$WorkDir     = Join-Path $Root 'work'
+if ($HomeDir) {
+    try { $Root = (Resolve-Path -LiteralPath $HomeDir.Trim('"', "'", ' ') -ErrorAction Stop).Path.TrimEnd('\') } catch { }
+}
+$DownloadDir = Join-Path $Root 'seanquest-downloads'
+$WorkDir     = Join-Path $Root 'seanquest-work'
 $ArchiveExt  = @('.zip', '.7z', '.rar', '.exe')
 $SetListPath = Join-Path $Root 'setlist.json'
 # A set list published with the project is picked up automatically when there is none beside the script.
@@ -116,7 +123,7 @@ $Mods = @(
        NameLike = 'xbox|dlc'; MinMB = 5; MaxMB = 300; Contains = @('DLC_XBOX', 'UPDATE_XBOX', 'addme.script')
        Url  = 'https://www.moddb.com/mods/xbox-dlc-content-for-pc/downloads/xbox-dlc-and-title-update-content-for-pc' }
     @{ Key = 'ai'; Name = 'AI Difficulty mod 2.0'; Default = $true; Source = 'moddb'; Kind = 'lvl'
-       What = 'Elite AI on the stock maps (replaces mission.lvl). If stock maps misbehave afterwards: install-mods.bat -Undo ai'
+       What = 'Elite AI on the stock maps (replaces mission.lvl). If stock maps misbehave afterwards: install-launcher.bat -Undo ai'
        NameLike = 'ai'; MaxMB = 300; Contains = @('mission.lvl')
        Url  = 'https://www.moddb.com/games/star-wars-battlefront-ii/downloads/ai-difficulty-mod' }
     @{ Key = 'shader-patch'; Name = 'Shader Patch (PrismaticFlower)'; Default = $true; Source = 'github'; Kind = 'overlay-root'
@@ -642,7 +649,7 @@ function Write-SetList($Installed, [string]$GameData) {
         ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $SetListPath
     Write-Ok "Set list written: $SetListPath"
     Write-Host "   SET CODE: $($print.Code)" -ForegroundColor Cyan
-    Write-Info 'Give setlist.json to the other player: it goes next to their install-mods.bat before they run it.'
+    Write-Info 'Give setlist.json to the other player: it goes next to their install-launcher.bat before they run it.'
 }
 
 # Compares this PC with the set list. Returns $true on an exact match.
@@ -887,8 +894,9 @@ function Select-Mods($Installed) {
                 Write-Host ("   [{0}] {1}. {2}{3}" -f $mark, ($i + 1), $m.Name, $done)
                 Write-Host ("          {0}" -f $m.What) -ForegroundColor DarkGray
             }
-            $answer = (Read-Host '   Type a number to switch it on or off, or press Enter to continue').Trim()
+            $answer = (Read-Host '   Type a number to switch it on or off, N for no mods at all, or press Enter to continue').Trim()
             if ($answer -eq '') { break }
+            if ($answer -in @('n', 'N', 'none')) { foreach ($m in $Mods) { $chosen[$m.Key] = $false }; break }
             $n = 0
             if ([int]::TryParse($answer, [ref]$n) -and $n -ge 1 -and $n -le $Mods.Count) { $k = $Mods[$n - 1].Key; $chosen[$k] = -not $chosen[$k] }
         }
@@ -1157,6 +1165,7 @@ function Invoke-Main {
         if ($NoLauncher) { $argList += '-NoLauncher' }
         if ($TestLaunch) { $argList += '-TestLaunch'; $argList += $TestLaunch }
         if ($Only) { $argList += '-Only'; $argList += ($Only -join ',') }
+        if ($HomeDir) { $argList += '-HomeDir'; $argList += "`"$Root`"" }
         Start-Process powershell -Verb RunAs -ArgumentList $argList
         exit 0
     }
@@ -1193,6 +1202,11 @@ function Invoke-Main {
         Start-Process "seanquest://launch?mission=$TestLaunch"
         Write-Info "If nothing happens, look at: $(Join-Path $gameData 'seanquest-launch.log')"
         return
+    }
+
+    if (-not $NoLauncher -and -not $MakeSetList -and -not $Verify -and -not $Undo) {
+        Write-Step 'Game launcher'
+        [void](Register-Launcher $gameData)
     }
 
     $script:SetList = Read-SetList
@@ -1234,11 +1248,16 @@ function Invoke-Main {
     $chosen = Select-Mods $installed
     $queue = @($Mods | Where-Object { $chosen[$_.Key] -and ($Force -or -not $installed.ContainsKey($_.Key)) })
     foreach ($m in ($Mods | Where-Object { $chosen[$_.Key] -and $installed.ContainsKey($_.Key) -and -not $Force })) { Write-Info "Skipping $($m.Name): already installed (use -Force to redo it)." }
-    if (-not $queue.Count) { Write-Info 'Nothing to install.'; return }
+    if (-not $queue.Count) {
+        Write-Info 'No mods to install.'
+        Write-Step 'Mission list'
+        [void](Send-MissionList $gameData)
+        return
+    }
 
     if ($chosen['xbox-dlc'] -and $chosen['bf1-maps']) {
         Write-Info "Note: the Xbox DLC's author says it may clash with BF1 map packs, and Marvel4's pack already has the four DLC maps."
-        Write-Info 'Folder-name clashes are caught during install. If maps are doubled or the game crashes: install-mods.bat -Undo xbox-dlc'
+        Write-Info 'Folder-name clashes are caught during install. If maps are doubled or the game crashes: install-launcher.bat -Undo xbox-dlc'
     }
     $needGb = 3; if ($queue | Where-Object { $_.Key -eq 'hd-graphics' }) { $needGb = 16 }
     try {
@@ -1283,7 +1302,6 @@ function Invoke-Main {
     }
 
     if (-not $NoShortcut) { Write-Step 'Shortcut'; New-GameShortcut $gameData }
-    if (-not $NoLauncher) { Write-Step 'Game launcher'; [void](Register-Launcher $gameData) }
     # the mods just installed add missions, so hand the board the new list
     Write-Step 'Mission list'
     [void](Send-MissionList $gameData)
@@ -1311,7 +1329,7 @@ function Invoke-Main {
     Write-Info "Replaced files were backed up to: $backupDir"
     Write-Info 'Both players need the same map mods (xbox-dlc, bf1-maps) to play together.'
     Write-Info 'Galactic Conquest bonuses in any match: pause, open Fake Console, pick "Bonus 1 ..." or "Bonus 2 ...".'
-    Write-Info 'To take one mod back out: install-mods.bat -Undo <key>   (for example -Undo ai, or -Undo xbox-dlc)'
+    Write-Info 'To take one mod back out: install-launcher.bat -Undo <key>   (for example -Undo ai, or -Undo xbox-dlc)'
     Write-Info 'To undo everything: Steam > game Properties > Installed Files > Verify integrity, then delete GameData\addon.'
 }
 

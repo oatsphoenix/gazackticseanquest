@@ -748,7 +748,7 @@
         ["spa7", "c", "Space Mygeeto"],
       ];
       // The mission list of a real game install, loaded from the mod installer's scan
-      // (install-mods.bat -ScanMissions). It says which map codes exist and which eras and modes each
+      // (install-launcher.bat -ScanMissions). It says which map codes exist and which eras and modes each
       // one really has:  state.missions = { cor1: { c: ["con", "ctf"], g: ["con", "ctf"] }, ... }
       // Until one is loaded the board offers every mode and cannot tell a real mission from a wrong one.
       const MISSIONS_KEY = "gazacktic-seanquest.missions";
@@ -1308,7 +1308,7 @@
           LAUNCHER_URL +
           '" download style="color:var(--or)">install-launcher.bat</a>.</li>' +
           "<li>Double-click it. If Windows asks whether to run it, choose Run (or More info, then Run anyway).</li>" +
-          "<li>It finds Battlefront II and sets the launcher up. Nothing else is changed.</li>" +
+          "<li>It finds Battlefront II and sets the launcher up first. It then offers the mod set: press N at that menu if you only want the launcher.</li>" +
           "<li>Come back here and press Try again. The first time, your browser asks whether to open the link: allow it.</li></ol>" +
           '<div class="hint" style="margin-top:10px">The mission for this battle is <span class="code">' +
           esc(modal.mission) +
@@ -3269,7 +3269,7 @@
           "</div>" +
           (state.missions
             ? ""
-            : '<div class="hint" style="min-height:0;margin:0 0 6px">These modes are not checked against your game yet, and a mode the map does not have loads a different map. Run <b>install-mods.bat -ScanMissions</b> once to load the real list.</div>') +
+            : '<div class="hint" style="min-height:0;margin:0 0 6px">These modes are not checked against your game yet, and a mode the map does not have loads a different map. Run <b>install-launcher.bat -ScanMissions</b> once to load the real list.</div>') +
           '<div class="grid"><button class="btn on" data-act="launch"' +
           (mission && (status !== "missing" || freeBattle(b)) ? "" : " disabled") +
           ' title="Starts Battlefront II on this mission. Needs the launcher installed on this PC; you are offered it if it is missing.">Launch game</button>' +
@@ -3419,7 +3419,7 @@
           ? "Mission list loaded: " +
             codes.length +
             " maps from a real game install. Battles only offer eras and modes that exist."
-          : "No mission list loaded. Run install-mods.bat -ScanMissions on a PC with the game to load it.";
+          : "No mission list loaded. Run install-launcher.bat -ScanMissions on a PC with the game to load it.";
         RULES.forEach((r) => {
           const i = $("rule-" + r[0]);
           if (document.activeElement !== i) i.value = state.rules[r[0]];
