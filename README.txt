@@ -9,6 +9,8 @@ Files
   index.html   The whole game: styles at the top, then the page layout, then the script.
   three.js     three.js r160, the 3D library (unminified, unchanged from the official build).
   mods/        Windows installer for the Battlefront II mod set and the game launcher.
+  fonts/       The three typefaces the board uses, with their licences (SIL Open Font License):
+               Oxanium (titles, numbers), Rajdhani (everything else), Share Tech Mono (mission codes).
 
 Where things are in index.html (search for these headings)
   state           The default board (planets, maps, lanes), players and the credit rules.

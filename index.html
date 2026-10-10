@@ -5,7 +5,47 @@
     <title>GaZacktic Seanquest</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
+      /* Open fonts (SIL Open Font License; licence texts are in fonts/):
+         Oxanium for titles and numbers, Rajdhani for everything else, Share Tech Mono for codes. */
+      @font-face {
+        font-family: "Oxanium";
+        font-weight: 500;
+        font-display: swap;
+        src: url("fonts/oxanium-latin-500-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Oxanium";
+        font-weight: 700;
+        font-display: swap;
+        src: url("fonts/oxanium-latin-700-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Rajdhani";
+        font-weight: 500;
+        font-display: swap;
+        src: url("fonts/rajdhani-latin-500-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Rajdhani";
+        font-weight: 600;
+        font-display: swap;
+        src: url("fonts/rajdhani-latin-600-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Rajdhani";
+        font-weight: 700;
+        font-display: swap;
+        src: url("fonts/rajdhani-latin-700-normal.woff2") format("woff2");
+      }
+      @font-face {
+        font-family: "Share Tech Mono";
+        font-weight: 400;
+        font-display: swap;
+        src: url("fonts/share-tech-mono-latin-400-normal.woff2") format("woff2");
+      }
       :root {
+        --display: "Oxanium", "Rajdhani", "Segoe UI", sans-serif;
+        --mono: "Share Tech Mono", Consolas, "Courier New", monospace;
         --cy: #39c5ff;
         --or: #ffb648;
         --bg: rgba(3, 12, 28, 0.84);
@@ -26,13 +66,11 @@
         background: #000;
         color: var(--txt);
         font:
-          13px/1.35 "Eurostile",
-          "Bank Gothic",
-          "Agency FB",
+          500 15px/1.3 "Rajdhani",
           "Segoe UI",
           system-ui,
           sans-serif;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.03em;
       }
       #c {
         position: fixed;
@@ -55,7 +93,7 @@
         text-align: center;
         white-space: nowrap;
         text-transform: uppercase;
-        font-size: 11px;
+        font-size: 13px;
         text-shadow:
           0 0 5px #000,
           0 0 2px #000,
@@ -79,7 +117,7 @@
         border: 1px solid rgba(255, 255, 255, 0.35);
       }
       .lbl.lane {
-        font-size: 10px;
+        font-size: 12px;
         color: #001018;
         background: var(--cy);
         padding: 0 5px;
@@ -89,7 +127,7 @@
       }
       .lbl.sp {
         color: var(--dim);
-        font-size: 10px;
+        font-size: 12px;
       }
 
       .panel {
@@ -124,7 +162,7 @@
         flex: 1;
         text-align: center;
         text-transform: uppercase;
-        font-size: 13px;
+        font-size: 15px;
       }
       #turn b {
         color: var(--or);
@@ -159,7 +197,7 @@
         height: 28px;
         overflow: hidden;
         border-bottom: 0;
-        font-size: 11px;
+        font-size: 13px;
         color: var(--dim);
         transition: height 0.25s ease;
       }
@@ -200,7 +238,7 @@
       }
       h2 {
         margin: 0 0 8px;
-        font-size: 12px;
+        font-size: 14px;
         letter-spacing: 0.22em;
         color: var(--or);
         text-transform: uppercase;
@@ -218,7 +256,7 @@
         color: var(--txt);
         padding: 4px 8px;
         font: inherit;
-        font-size: 11px;
+        font-size: 13px;
         text-transform: uppercase;
         cursor: pointer;
         letter-spacing: 0.08em;
@@ -281,7 +319,7 @@
         flex: 0 0 78px;
         color: var(--dim);
         text-transform: uppercase;
-        font-size: 10px;
+        font-size: 12px;
       }
       .row > input,
       .row > select {
@@ -295,7 +333,7 @@
         color: var(--txt);
         padding: 3px 5px;
         font: inherit;
-        font-size: 12px;
+        font-size: 14px;
       }
       input[type="color"] {
         padding: 0;
@@ -368,7 +406,7 @@
       }
       .pl .hd .chev {
         color: var(--dim);
-        font-size: 10px;
+        font-size: 12px;
       }
       .pl:not(.min) .hd {
         margin-bottom: 4px;
@@ -409,12 +447,12 @@
       }
       .pl .st {
         color: var(--dim);
-        font-size: 11px;
+        font-size: 13px;
         margin-bottom: 6px;
         text-transform: uppercase;
       }
       .tag {
-        font-size: 10px;
+        font-size: 12px;
         background: var(--or);
         color: #000;
         padding: 0 5px;
@@ -422,7 +460,7 @@
       }
       .hint {
         color: var(--dim);
-        font-size: 11px;
+        font-size: 13px;
         margin-top: 6px;
         min-height: 30px;
       }
@@ -447,7 +485,7 @@
         color: var(--or);
         letter-spacing: 0.22em;
         text-transform: uppercase;
-        font-size: 12px;
+        font-size: 14px;
         border-bottom: 1px solid var(--line);
         padding-bottom: 4px;
         margin-bottom: 8px;
@@ -497,7 +535,7 @@
       #modalBox .mlabel {
         color: var(--dim);
         text-transform: uppercase;
-        font-size: 10px;
+        font-size: 12px;
         margin: 12px 0 5px;
       }
       #modalBox .btn {
@@ -513,7 +551,7 @@
         margin: 6px 0 0;
         padding-left: 20px;
         color: var(--txt);
-        font-size: 12px;
+        font-size: 14px;
       }
       #modalBox ol li {
         margin: 3px 0;
@@ -530,7 +568,7 @@
         gap: 6px;
         margin: 0 0 8px 0;
         color: var(--dim);
-        font-size: 10px;
+        font-size: 12px;
         text-transform: uppercase;
       }
       .map2 input {
@@ -553,6 +591,261 @@
       }
       ::-webkit-scrollbar-thumb {
         background: var(--line);
+      }
+
+      /* ── finish: type roles, panel frames, controls ── */
+      #top h1,
+      h2,
+      #modalBox h2,
+      details summary,
+      #logTab > span:first-child,
+      .pl .hd b,
+      .pl .cr input,
+      .pl .hd .mini,
+      .tag,
+      #toast,
+      .lbl .nm {
+        font-family: var(--display);
+      }
+      #modalBox .code {
+        font-family: var(--mono);
+      }
+      #top h1 {
+        font-weight: 700;
+        font-size: 18px;
+        letter-spacing: 0.3em;
+      }
+      .lbl .nm {
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.16em;
+      }
+      .lbl .pips i {
+        width: 11px;
+        height: 5px;
+        border-radius: 1px;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.9);
+      }
+      /* panels: a soft gradient, faint scan lines, and bright corner marks that stay put when the
+         panel scrolls (they are backgrounds, not elements) */
+      .panel {
+        --c: rgba(120, 220, 255, 0.95);
+        background:
+          linear-gradient(var(--c), var(--c)) top left / 16px 2px no-repeat,
+          linear-gradient(var(--c), var(--c)) top left / 2px 16px no-repeat,
+          linear-gradient(var(--c), var(--c)) bottom right / 16px 2px no-repeat,
+          linear-gradient(var(--c), var(--c)) bottom right / 2px 16px no-repeat,
+          repeating-linear-gradient(0deg, rgba(120, 200, 255, 0.028) 0 1px, transparent 1px 3px),
+          linear-gradient(180deg, rgba(8, 26, 54, 0.9), rgba(2, 9, 22, 0.9));
+        border-color: rgba(57, 197, 255, 0.3);
+        backdrop-filter: blur(6px);
+        box-shadow:
+          0 8px 30px rgba(0, 0, 0, 0.55),
+          0 0 22px rgba(57, 197, 255, 0.1),
+          inset 0 0 40px rgba(57, 197, 255, 0.04);
+      }
+      #top {
+        background:
+          linear-gradient(
+              90deg,
+              transparent,
+              rgba(57, 197, 255, 0.55) 20%,
+              rgba(255, 182, 72, 0.6) 50%,
+              rgba(57, 197, 255, 0.55) 80%,
+              transparent
+            )
+            bottom / 100% 1px no-repeat,
+          linear-gradient(180deg, rgba(8, 26, 54, 0.94), rgba(2, 9, 22, 0.88));
+        border: 0;
+        gap: 8px;
+      }
+      #turn {
+        font-family: var(--display);
+        letter-spacing: 0.14em;
+        font-size: 14px;
+      }
+      h2,
+      details summary {
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: 0.24em;
+        border-bottom: 0;
+        padding: 0 0 6px 10px;
+        background:
+          linear-gradient(var(--or), var(--or)) left 2px / 3px 11px no-repeat,
+          linear-gradient(90deg, rgba(57, 197, 255, 0.55), transparent) bottom / 100% 1px no-repeat;
+      }
+      details summary {
+        list-style: none;
+        padding-right: 18px;
+        position: relative;
+      }
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+      details summary::after {
+        content: "+";
+        position: absolute;
+        right: 2px;
+        top: -3px;
+        color: var(--cy);
+        font-size: 17px;
+      }
+      details[open] summary::after {
+        content: "\2013";
+      }
+      /* controls */
+      .btn,
+      .chip {
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        background: linear-gradient(180deg, rgba(57, 197, 255, 0.16), rgba(57, 197, 255, 0.05));
+        border-color: rgba(57, 197, 255, 0.45);
+        transition:
+          background 0.12s,
+          border-color 0.12s,
+          box-shadow 0.12s,
+          color 0.12s,
+          transform 0.06s;
+      }
+      .btn {
+        padding: 6px 10px;
+        min-height: 30px;
+      }
+      .btn:hover:not(:disabled),
+      .chip:hover:not(:disabled) {
+        background: linear-gradient(180deg, rgba(57, 197, 255, 0.4), rgba(57, 197, 255, 0.16));
+        border-color: var(--cy);
+        box-shadow: 0 0 12px rgba(57, 197, 255, 0.35);
+        color: #fff;
+      }
+      .btn:active:not(:disabled),
+      .chip:active:not(:disabled) {
+        transform: translateY(1px);
+      }
+      .btn:focus-visible,
+      .chip:focus-visible,
+      input:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--cy);
+        outline-offset: 1px;
+      }
+      .btn.on {
+        background: linear-gradient(180deg, #ffc86a, #f0a02c);
+        border-color: #ffd58a;
+        box-shadow: 0 0 14px rgba(255, 182, 72, 0.4);
+        font-weight: 700;
+      }
+      .btn.on:hover:not(:disabled) {
+        background: linear-gradient(180deg, #ffd88e, #ffb648);
+        color: #120a00;
+        box-shadow: 0 0 18px rgba(255, 182, 72, 0.6);
+      }
+      .btn.warn {
+        background: linear-gradient(180deg, rgba(255, 106, 90, 0.16), rgba(255, 106, 90, 0.04));
+      }
+      .btn.warn:hover:not(:disabled) {
+        background: linear-gradient(180deg, rgba(255, 106, 90, 0.42), rgba(255, 106, 90, 0.16));
+        border-color: #ff8a7c;
+        box-shadow: 0 0 12px rgba(255, 106, 90, 0.35);
+      }
+      .btn:disabled,
+      .chip:disabled {
+        opacity: 0.32;
+        background: none;
+        border-style: dashed;
+      }
+      .chip {
+        width: 24px;
+        min-height: 22px;
+      }
+      .chip.on {
+        background: var(--pc, #52626f);
+      }
+      input,
+      select {
+        font-weight: 500;
+        background: rgba(0, 8, 20, 0.75);
+        border-color: rgba(57, 197, 255, 0.35);
+        padding: 4px 6px;
+        transition: border-color 0.12s;
+      }
+      input:hover:not(:disabled),
+      select:hover:not(:disabled) {
+        border-color: var(--cy);
+      }
+      .row label,
+      .mlabel,
+      .pl .st {
+        letter-spacing: 0.1em;
+      }
+      /* commander cards */
+      .pl {
+        background: linear-gradient(90deg, color-mix(in srgb, var(--pc) 14%, transparent), transparent 60%);
+        border-color: rgba(57, 197, 255, 0.3);
+      }
+      .pl.cur {
+        box-shadow:
+          0 0 16px color-mix(in srgb, var(--pc) 55%, transparent),
+          inset 0 0 18px color-mix(in srgb, var(--pc) 10%, transparent);
+      }
+      .pl .hd b,
+      .pl .cr input {
+        font-weight: 700;
+      }
+      .tag {
+        font-weight: 700;
+        padding: 1px 6px;
+        letter-spacing: 0.12em;
+        clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+      }
+      /* dialogs and notices */
+      #modal {
+        backdrop-filter: blur(3px);
+      }
+      #modal.show #modalBox {
+        animation: rise 0.16s ease-out;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(8px) scale(0.985);
+        }
+      }
+      #toast {
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        padding: 7px 22px;
+        clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+        box-shadow: 0 0 20px rgba(255, 182, 72, 0.5);
+      }
+      #logTab > span:first-child {
+        letter-spacing: 0.24em;
+      }
+      /* a dialog taller than the window scrolls instead of running off the bottom */
+      #modalBox {
+        max-height: calc(100vh - 24px);
+        overflow: auto;
+      }
+      /* the four purchase buttons sit two to a row in a narrow card: keep each on one line */
+      .pl .grid .btn {
+        white-space: nowrap;
+        letter-spacing: 0.04em;
+        padding-inline: 4px;
+      }
+      /* planet names: the owner's colour, lightened so thin letters stay readable over the board */
+      .lbl {
+        color: color-mix(in srgb, var(--oc, #cfeaff) 58%, #fff);
+      }
+      .lbl.lane {
+        color: #001018;
+      }
+      .lbl .nm {
+        font-weight: 700;
+        text-shadow:
+          0 0 4px #000,
+          0 0 8px #000,
+          0 1px 2px #000;
       }
     </style>
   </head>
@@ -1482,6 +1775,8 @@
       const canvas = $("c");
       const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.toneMapping = THREE.ACESFilmicToneMapping; // gentler highlights on the lit side of planets
+      renderer.toneMappingExposure = 1.15;
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 600);
       const cam = { target: new THREE.Vector3(0, 0, 0), r: 25, theta: 0, phi: 0.82 };
@@ -1508,10 +1803,16 @@
           focusedId = null;
         }
       }
-      scene.add(new THREE.AmbientLight(0x7f95bb, 0.75));
-      const sun = new THREE.DirectionalLight(0xffffff, 2.6);
-      sun.position.set(-9, 11, 7);
+      // One warm sun from the upper left, a dim blue fill from the other side so night sides keep
+      // some shape, and a little ambient.
+      const SUN_DIR = new THREE.Vector3(-9, 11, 7).normalize();
+      scene.add(new THREE.AmbientLight(0x6f86b0, 0.42));
+      const sun = new THREE.DirectionalLight(0xfff1dc, 3.0);
+      sun.position.copy(SUN_DIR).multiplyScalar(40);
       scene.add(sun);
+      const fill = new THREE.DirectionalLight(0x3d6dff, 0.55);
+      fill.position.copy(SUN_DIR).multiplyScalar(-40).setY(6);
+      scene.add(fill);
 
       function glowTexture() {
         const cv = document.createElement("canvas");
@@ -1536,6 +1837,7 @@
             opacity,
             blending: THREE.AdditiveBlending,
             depthWrite: false,
+            toneMapped: false,
           }),
         );
         s.scale.setScalar(scale);
@@ -1575,16 +1877,59 @@
           ),
         );
 
+        // Nebulae: a few big tinted cloud sprites cut from two noise textures.
+        const nebulaTexture = (seed) => {
+          const N = 256,
+            cv = document.createElement("canvas");
+          cv.width = cv.height = N;
+          const g = cv.getContext("2d"),
+            img = g.createImageData(N, N);
+          for (let y = 0; y < N; y++)
+            for (let x = 0; x < N; x++) {
+              const u = x / N - 0.5,
+                v = y / N - 0.5,
+                fall = clamp(1 - Math.hypot(u, v) * 2, 0, 1),
+                n = fbm(u * 5 + 9, v * 5 + 3, seed * 0.37, seed, 5),
+                wisp = fbm(u * 11, v * 11, 4.2, seed + 31, 3),
+                a = clamp((n - 0.42) * 3.2, 0, 1) * (0.55 + 0.45 * wisp) * fall * fall,
+                i = (y * N + x) * 4;
+              img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+              img.data[i + 3] = a * 255;
+            }
+          g.putImageData(img, 0, 0);
+          return new THREE.CanvasTexture(cv);
+        };
+        const NEB = [nebulaTexture(11), nebulaTexture(47)];
         [
-          [0x3a2a9a, -120, 30, -150, 190],
-          [0x0f5a8a, 150, -20, -120, 170],
-          [0x7a2a6a, 60, 70, 170, 180],
-          [0x146a6a, -160, -50, 90, 160],
-        ].forEach((n) => {
-          const s = glowSprite(n[0], n[4], 0.32);
+          [0x4a35c8, -130, 35, -160, 260, 0.4],
+          [0x1272b0, 160, -25, -130, 240, 1.9],
+          [0x9a2f86, 70, 80, 180, 250, 3.1],
+          [0x168c8c, -170, -55, 100, 220, 4.4],
+          [0x2a4fd0, 20, -90, -200, 300, 5.2],
+          [0xb0503a, 190, 60, 60, 180, 0.9],
+        ].forEach((n, i) => {
+          const s = new THREE.Sprite(
+            new THREE.SpriteMaterial({
+              map: NEB[i % 2],
+              color: n[0],
+              transparent: true,
+              opacity: 0.5,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+              rotation: n[5],
+              toneMapped: false,
+            }),
+          );
+          s.scale.setScalar(n[4]);
           s.position.set(n[1], n[2], n[3]);
           scene.add(s);
         });
+        // the sun itself, far off in the direction the light comes from
+        const halo = glowSprite(0xffd9a0, 90, 0.55),
+          disc = glowSprite(0xffffff, 26, 1);
+        halo.position.copy(SUN_DIR).multiplyScalar(230);
+        disc.position.copy(halo.position);
+        scene.add(halo, disc);
 
         pos = [];
         col = [];
@@ -1643,6 +1988,49 @@
             ),
           );
         }
+        // the holo table: a soft lit disc under the grid, and tick marks on the rim
+        const table = document.createElement("canvas");
+        table.width = table.height = 256;
+        const tg = table.getContext("2d"),
+          grad = tg.createRadialGradient(128, 128, 10, 128, 128, 128);
+        grad.addColorStop(0, "rgba(90,190,255,.30)");
+        grad.addColorStop(0.55, "rgba(40,130,220,.12)");
+        grad.addColorStop(1, "rgba(20,80,160,0)");
+        tg.fillStyle = grad;
+        tg.fillRect(0, 0, 256, 256);
+        const disc2 = new THREE.Mesh(
+          new THREE.CircleGeometry(23, 64),
+          new THREE.MeshBasicMaterial({
+            map: new THREE.CanvasTexture(table),
+            transparent: true,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            toneMapped: false,
+          }),
+        );
+        disc2.rotation.x = -Math.PI / 2;
+        disc2.position.y = -0.95;
+        scene.add(disc2);
+        const tick = new THREE.MeshBasicMaterial({
+          color: 0x39c5ff,
+          transparent: true,
+          opacity: 0.5,
+          depthWrite: false,
+          toneMapped: false,
+        });
+        for (let i = 0; i < 72; i++) {
+          const a = (i / 72) * 6.2832,
+            long = i % 6 === 0,
+            m = new THREE.Mesh(new THREE.PlaneGeometry(long ? 0.9 : 0.4, 0.05), tick);
+          m.rotation.x = -Math.PI / 2;
+          m.rotation.z = -a;
+          m.position.set(
+            Math.cos(a) * (20.4 + (long ? 0.45 : 0.2)),
+            -0.9,
+            Math.sin(a) * (20.4 + (long ? 0.45 : 0.2)),
+          );
+          scene.add(m);
+        }
       })();
 
       // procedural planet skins
@@ -1699,7 +2087,6 @@
             [1, 62, 132, 192],
           ],
           atm: 0x7fc4ff,
-          fx: "clouds",
         },
         desert: {
           ramp: [
@@ -1747,6 +2134,21 @@
           atm: 0xffd0a0,
           bands: true,
         },
+      };
+      // More about each surface: how strong its relief is, how thick a drifting cloud layer it has
+      // (0 = none), and whether it has air at all (stations do not).
+      const TRAITS = {
+        jungle: { bump: 4, clouds: 0.75, air: true },
+        city: { bump: 1.5, clouds: 0.25, air: true },
+        ice: { bump: 3, clouds: 0.45, air: true },
+        rock: { bump: 6, clouds: 0, air: false },
+        station: { bump: 0, clouds: 0, air: false },
+        ocean: { bump: 1, clouds: 0.95, air: true },
+        desert: { bump: 3, clouds: 0.15, air: true },
+        deathstar: { bump: 0, clouds: 0, air: false },
+        lava: { bump: 5, clouds: 0, air: true },
+        dust: { bump: 1.5, clouds: 0, air: true },
+        gas: { bump: 0, clouds: 0, air: true },
       };
       function h3(x, y, z, s) {
         let h = (x * 374761393 + y * 668265263 + z * 1274126177 + s * 1442695041) | 0;
@@ -1803,20 +2205,9 @@
         const e = ramp[ramp.length - 1];
         return [e[1], e[2], e[3]];
       }
-      const texCache = {};
-      function planetTexture(type, seed) {
-        const key = type + ":" + seed;
-        if (texCache[key]) return texCache[key];
-        const T = TYPES[type] || TYPES.rock,
-          W = 384,
-          H = 192,
-          cv = document.createElement("canvas");
-        cv.width = W;
-        cv.height = H;
-        const g = cv.getContext("2d"),
-          img = g.createImageData(W, H),
-          d = img.data;
-        for (let y = 0; y < H; y++) {
+      // Paints rows y0..y1 of a planet's colour image (d) and height image (hd).
+      function paintPlanetRows(T, seed, W, H, y0, y1, d, hd) {
+        for (let y = y0; y < y1; y++) {
           const phi = ((y + 0.5) / H) * Math.PI,
             sy = Math.cos(phi),
             sr = Math.sin(phi);
@@ -1828,93 +2219,305 @@
             if (T.bands) {
               n = fbm(px * 0.8, sy * 5, pz * 0.8, seed, 4);
               n = n * 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(sy * 13 + n * 5));
-            } else n = fbm(px * 2.3 + 7, sy * 2.3, pz * 2.3, seed, 5);
+            } else n = fbm(px * 2.3 + 7, sy * 2.3, pz * 2.3, seed, 6);
             n = T.ridge ? clamp(Math.abs(n - 0.5) * 3.2, 0, 1) : clamp((n - 0.5) * 1.9 + 0.5, 0, 1);
-            let c = rampAt(T.ramp, n);
-            if (T.fx === "clouds") {
-              const a = clamp((fbm(px * 3 + 3, sy * 7, pz * 3, seed + 99, 4) - 0.5) * 5, 0, 1) * 0.9;
-              c = [c[0] + (255 - c[0]) * a, c[1] + (255 - c[1]) * a, c[2] + (255 - c[2]) * a];
-            }
-            const i = (y * W + x) * 4;
+            const c = rampAt(T.ramp, n),
+              i = (y * W + x) * 4;
             d[i] = c[0];
             d[i + 1] = c[1];
             d[i + 2] = c[2];
             d[i + 3] = 255;
+            hd[i] = hd[i + 1] = hd[i + 2] = n * 255;
+            hd[i + 3] = 255;
           }
         }
-        g.putImageData(img, 0, 0);
-        let k = seed;
-        const rnd = () => (k = (k * 1664525 + 1013904223) >>> 0) / 4294967296;
+      }
+      // Details drawn over the colour image. k scales them with the image size.
+      function decoratePlanet(T, seed, g, W, H) {
+        const k = W / 384;
+        let r = seed;
+        const rnd = () => (r = (r * 1664525 + 1013904223) >>> 0) / 4294967296;
         if (T.fx === "city") {
-          for (let i = 0; i < 2600; i++) {
+          for (let i = 0; i < 2600 * k * k; i++) {
             g.fillStyle = "rgba(255," + ((200 + rnd() * 55) | 0) + ",140," + (0.3 + rnd() * 0.7) + ")";
             g.fillRect(rnd() * W, rnd() * H, 1 + (rnd() > 0.85), 1);
           }
           g.strokeStyle = "rgba(255,220,150,.25)";
-          for (let i = 0; i < 26; i++) {
+          for (let i = 0; i < 26 * k; i++) {
             g.beginPath();
             const x = rnd() * W,
               y = rnd() * H;
             g.moveTo(x, y);
-            g.lineTo(x + rnd() * 70 - 35, y + rnd() * 30 - 15);
+            g.lineTo(x + (rnd() * 70 - 35) * k, y + (rnd() * 30 - 15) * k);
             g.stroke();
           }
         } else if (T.fx === "craters") {
           for (let i = 0; i < 60; i++) {
             const x = rnd() * W,
-              y = 15 + rnd() * (H - 30),
-              r = 2 + rnd() * 9;
+              y = (15 + rnd() * 162) * k,
+              rad = (2 + rnd() * 9) * k;
             g.fillStyle = "rgba(0,0,0,.28)";
             g.beginPath();
-            g.arc(x, y, r, 0, 7);
+            g.arc(x, y, rad, 0, 7);
             g.fill();
             g.strokeStyle = "rgba(255,255,255,.2)";
+            g.lineWidth = k;
             g.beginPath();
-            g.arc(x - 0.6, y - 0.6, r, 0, 7);
+            g.arc(x - 0.6 * k, y - 0.6 * k, rad, 0, 7);
             g.stroke();
           }
         } else if (T.fx === "panels") {
           for (let i = 0; i < 140; i++) {
             g.fillStyle = "rgba(0,0,0," + rnd() * 0.16 + ")";
-            g.fillRect(rnd() * W, rnd() * H, 6 + rnd() * 30, 4 + rnd() * 14);
+            g.fillRect(rnd() * W, rnd() * H, (6 + rnd() * 30) * k, (4 + rnd() * 14) * k);
           }
           g.fillStyle = "rgba(165,34,30,.9)";
           g.fillRect(0, H * 0.46, W, H * 0.07);
           g.fillStyle = "rgba(0,0,0,.3)";
-          for (let x = 0; x < W; x += 24) g.fillRect(x, 0, 1, H);
+          for (let x = 0; x < W; x += 24 * k) g.fillRect(x, 0, k, H);
         } else if (T.fx === "deathstar") {
           g.fillStyle = "rgba(0,0,0,.14)";
-          for (let y = 6; y < H; y += 9) g.fillRect(0, y, W, 1);
+          for (let y = 6 * k; y < H; y += 9 * k) g.fillRect(0, y, W, k);
           for (let i = 0; i < 260; i++) {
             g.fillStyle = "rgba(0,0,0," + rnd() * 0.14 + ")";
-            g.fillRect(rnd() * W, rnd() * H, 4 + rnd() * 22, 3 + rnd() * 6);
+            g.fillRect(rnd() * W, rnd() * H, (4 + rnd() * 22) * k, (3 + rnd() * 6) * k);
           }
           g.fillStyle = "#23262b";
-          g.fillRect(0, H / 2 - 2, W, 4);
+          g.fillRect(0, H / 2 - 2 * k, W, 4 * k);
           const dx = W * 0.3,
             dy = H * 0.3,
-            gr = g.createRadialGradient(dx, dy, 2, dx, dy, 25);
+            gr = g.createRadialGradient(dx, dy, 2 * k, dx, dy, 25 * k);
           gr.addColorStop(0, "#3a3d44");
           gr.addColorStop(0.8, "#6a6d74");
           gr.addColorStop(1, "#c2c5cc");
           g.fillStyle = gr;
           g.beginPath();
-          g.ellipse(dx, dy, 29, 24, 0, 0, 7);
+          g.ellipse(dx, dy, 29 * k, 24 * k, 0, 0, 7);
           g.fill();
           g.fillStyle = "#b6ffb0";
           g.beginPath();
-          g.arc(dx, dy, 1.6, 0, 7);
+          g.arc(dx, dy, 1.6 * k, 0, 7);
           g.fill();
-          for (let i = 0; i < 300; i++) {
+          for (let i = 0; i < 300 * k; i++) {
             g.fillStyle = "rgba(255,255,220," + rnd() * 0.7 + ")";
-            g.fillRect(rnd() * W, rnd() * H, 1, 1);
+            g.fillRect(rnd() * W, rnd() * H, k, k);
           }
         }
-        const tex = new THREE.CanvasTexture(cv);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.anisotropy = 4;
-        return (texCache[key] = tex);
       }
+      function planetCanvases(W, H) {
+        const cv = document.createElement("canvas"),
+          hv = document.createElement("canvas");
+        cv.width = hv.width = W;
+        cv.height = hv.height = H;
+        const g = cv.getContext("2d"),
+          hg = hv.getContext("2d");
+        return { cv, hv, g, hg, img: g.createImageData(W, H), himg: hg.createImageData(W, H) };
+      }
+      function planetTextures(T, seed, c, W, H) {
+        c.g.putImageData(c.img, 0, 0);
+        c.hg.putImageData(c.himg, 0, 0);
+        decoratePlanet(T, seed, c.g, W, H);
+        const map = new THREE.CanvasTexture(c.cv),
+          bump = new THREE.CanvasTexture(c.hv);
+        map.colorSpace = THREE.SRGBColorSpace;
+        map.anisotropy = bump.anisotropy = 8;
+        return { map, bump };
+      }
+      // Each planet gets a small skin at once, so the board appears immediately, and a sharp one
+      // drawn a few rows at a time in the background, which replaces it when ready.
+      const texCache = {},
+        sharpQueue = [];
+      let sharpBusy = false;
+      function planetTexture(type, seed) {
+        const key = type + ":" + seed;
+        if (texCache[key]) return texCache[key];
+        const T = TYPES[type] || TYPES.rock,
+          c = planetCanvases(384, 192);
+        paintPlanetRows(T, seed, 384, 192, 0, 192, c.img.data, c.himg.data);
+        texCache[key] = Object.assign(planetTextures(T, seed, c, 384, 192), { key });
+        sharpQueue.push({ key, T, seed });
+        if (!sharpBusy) sharpenNext();
+        return texCache[key];
+      }
+      function sharpenNext() {
+        const job = sharpQueue.shift();
+        sharpBusy = !!job;
+        if (!job) return;
+        const W = 1024,
+          H = 512,
+          c = planetCanvases(W, H);
+        let y = 0;
+        const step = () => {
+          paintPlanetRows(job.T, job.seed, W, H, y, Math.min(H, y + 12), c.img.data, c.himg.data);
+          y += 12;
+          if (y < H) return setTimeout(step, 0);
+          const old = texCache[job.key],
+            sharp = Object.assign(planetTextures(job.T, job.seed, c, W, H), { key: job.key });
+          texCache[job.key] = sharp;
+          for (const m of spinners) {
+            if (m.userData.tex !== job.key) continue;
+            m.material.map = sharp.map;
+            if (m.material.bumpMap) m.material.bumpMap = sharp.bump;
+            if (m.material.emissiveMap) m.material.emissiveMap = sharp.map;
+            m.material.needsUpdate = true;
+          }
+          old.map.dispose();
+          old.bump.dispose();
+          setTimeout(sharpenNext, 30);
+        };
+        setTimeout(step, 400);
+      }
+
+      // One drifting cloud layer shared by every planet that has weather.
+      const CLOUDS = (() => {
+        const W = 512,
+          H = 256,
+          cv = document.createElement("canvas");
+        cv.width = W;
+        cv.height = H;
+        const g = cv.getContext("2d"),
+          img = g.createImageData(W, H);
+        for (let y = 0; y < H; y++) {
+          const phi = ((y + 0.5) / H) * Math.PI,
+            sy = Math.cos(phi),
+            sr = Math.sin(phi);
+          for (let x = 0; x < W; x++) {
+            const th = (x / W) * Math.PI * 2,
+              a = clamp(
+                (fbm(sr * Math.cos(th) * 3 + 3, sy * 6.5, sr * Math.sin(th) * 3, 99, 5) - 0.5) * 5.5,
+                0,
+                1,
+              ),
+              i = (y * W + x) * 4;
+            img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
+            img.data[i + 3] = a * 255;
+          }
+        }
+        g.putImageData(img, 0, 0);
+        const t = new THREE.CanvasTexture(cv);
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.wrapS = THREE.RepeatWrapping;
+        return t;
+      })();
+
+      // Air around a planet, as two shells: a thin rim on the surface and a halo just outside it.
+      // Both fade toward the planet's night side.
+      const AIR_VERT = `
+        varying vec3 vN; varying vec3 vWN; varying vec3 vWP;
+        void main() {
+          vN = normalize(normalMatrix * normal);
+          vWN = normalize(mat3(modelMatrix) * normal);
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vWP = wp.xyz;
+          gl_Position = projectionMatrix * viewMatrix * wp;
+        }`;
+      const AIR_FRAG = `
+        uniform vec3 col; uniform vec3 sun; uniform float halo;
+        varying vec3 vN; varying vec3 vWN; varying vec3 vWP;
+        void main() {
+          vec3 toCam = normalize(cameraPosition - vWP);
+          float facing = dot(vWN, toCam);
+          float glow, lit;
+          if (halo > 0.5) {
+            // back of a larger shell: brightest at the planet's edge, gone at the shell's edge
+            glow = pow(clamp(-facing / 0.573, 0.0, 1.0), 2.4) * 0.85;
+            vec3 limb = normalize(vWN - facing * toCam);
+            lit = 0.22 + 0.78 * smoothstep(-0.45, 0.55, dot(-limb, sun));
+          } else {
+            glow = pow(1.0 - clamp(facing, 0.0, 1.0), 3.0) * 0.8;
+            lit = 0.15 + 0.85 * smoothstep(-0.3, 0.5, dot(vWN, sun));
+          }
+          gl_FragColor = vec4(col * glow * lit, 1.0);
+        }`;
+      function airShell(R, color, halo) {
+        return new THREE.Mesh(
+          new THREE.SphereGeometry(R * (halo ? 1.22 : 1.012), 48, 32),
+          new THREE.ShaderMaterial({
+            uniforms: {
+              col: { value: new THREE.Color(color) },
+              sun: { value: SUN_DIR },
+              halo: { value: halo ? 1 : 0 },
+            },
+            vertexShader: AIR_VERT,
+            fragmentShader: AIR_FRAG,
+            side: halo ? THREE.BackSide : THREE.FrontSide,
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false,
+          }),
+        );
+      }
+
+      // Shared textures for lanes (a soft dash that flows along them), planetary rings and beacons.
+      const stripTexture = (w, h, draw) => {
+        const cv = document.createElement("canvas");
+        cv.width = w;
+        cv.height = h;
+        draw(cv.getContext("2d"));
+        return new THREE.CanvasTexture(cv);
+      };
+      const LANE_TEX = stripTexture(4, 64, (g) => {
+        const gr = g.createLinearGradient(0, 0, 0, 64);
+        gr.addColorStop(0, "rgba(255,255,255,0)");
+        gr.addColorStop(0.5, "rgba(255,255,255,1)");
+        gr.addColorStop(0.62, "rgba(255,255,255,0)");
+        gr.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 4, 64);
+      });
+      LANE_TEX.wrapT = THREE.RepeatWrapping;
+      const RING_TEX = stripTexture(256, 4, (g) => {
+        let r = 7;
+        const rnd = () => (r = (r * 1664525 + 1013904223) >>> 0) / 4294967296;
+        for (let x = 0; x < 256; x++) {
+          const edge = Math.min(1, x / 18, (255 - x) / 18),
+            band = 0.35 + 0.65 * rnd() * (0.5 + 0.5 * Math.sin(x * 0.21));
+          g.fillStyle = "rgba(255,255,255," + clamp(edge * band, 0, 1) + ")";
+          g.fillRect(x, 0, 1, 4);
+        }
+      });
+      const BEAM_TEX = stripTexture(4, 64, (g) => {
+        const gr = g.createLinearGradient(0, 0, 0, 64);
+        gr.addColorStop(0, "rgba(255,255,255,0)");
+        gr.addColorStop(1, "rgba(255,255,255,1)");
+        g.fillStyle = gr;
+        g.fillRect(0, 0, 4, 64);
+      });
+      // A flat ring whose texture runs from its inner edge to its outer edge.
+      function ringMesh(inner, outer, color, opacity) {
+        const geo = new THREE.RingGeometry(inner, outer, 96, 1),
+          p = geo.attributes.position,
+          uv = geo.attributes.uv;
+        for (let i = 0; i < p.count; i++)
+          uv.setXY(i, (Math.hypot(p.getX(i), p.getY(i)) - inner) / (outer - inner), 0.5);
+        return new THREE.Mesh(
+          geo,
+          new THREE.MeshBasicMaterial({
+            map: RING_TEX,
+            color,
+            transparent: true,
+            opacity,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+            toneMapped: false,
+          }),
+        );
+      }
+      // A capital ship seen from above: a wedge with a raised spine and a bridge block.
+      const SHIP_GEO = (() => {
+        const N = [0, 0, 0.46],
+          L = [-0.23, 0, -0.3],
+          R = [0.23, 0, -0.3],
+          T = [0, 0.1, -0.26],
+          B = [0, -0.05, -0.28];
+        const tris = [N, L, T, N, T, R, N, B, L, N, R, B, L, B, T, B, R, T];
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.Float32BufferAttribute(tris.flat(), 3));
+        geo.computeVertexNormals();
+        return geo;
+      })();
+      const BRIDGE_GEO = new THREE.BoxGeometry(0.11, 0.07, 0.09).translate(0, 0.115, -0.2);
+
       const seedOf = (id) => {
         let h = 7;
         for (const c of String(id)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
@@ -1939,7 +2542,7 @@
 
       function disposeGroup(g) {
         g.traverse((o) => {
-          if (o.geometry) o.geometry.dispose();
+          if (o.geometry && o.geometry !== SHIP_GEO && o.geometry !== BRIDGE_GEO) o.geometry.dispose();
           if (o.material && o.material.map !== GLOW) o.material.dispose();
           else if (o.material) o.material.dispose();
         });
@@ -1958,12 +2561,13 @@
           side: THREE.DoubleSide,
           depthWrite: false,
           blending: add ? THREE.AdditiveBlending : THREE.NormalBlending,
+          toneMapped: false, // keep interface colours exact
         });
       function addLabel(cls, html, x, z, r, color) {
         const el = document.createElement("div");
         el.className = "lbl " + cls;
         el.innerHTML = html;
-        if (color) el.style.color = color;
+        if (color) el.style.setProperty("--oc", color); // owner's colour; the stylesheet lightens it for legibility
         labelRoot.appendChild(el);
         labels.push({ el, x, z, r });
       }
@@ -2018,12 +2622,32 @@
             on = sel && sel.kind === "lane" && sel.id === l.id;
           const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
           const beam = new THREE.Mesh(
-            new THREE.CylinderGeometry(on ? 0.07 : 0.035, on ? 0.07 : 0.035, L, 6),
-            basic(on ? 0xffb648 : 0x39c5ff, on ? 0.95 : 0.6, true),
+            new THREE.CylinderGeometry(on ? 0.05 : 0.022, on ? 0.05 : 0.022, L, 6),
+            basic(on ? 0xffb648 : 0x39c5ff, on ? 0.9 : 0.42, true),
           );
           beam.position.copy(mid);
           beam.quaternion.copy(q);
           board.add(beam);
+          // the flow: a wider sleeve carrying the dash texture, stretched to repeat about once per unit
+          const sleeveGeo = new THREE.CylinderGeometry(on ? 0.075 : 0.045, on ? 0.075 : 0.045, L, 8, 1, true),
+            suv = sleeveGeo.attributes.uv;
+          for (let i = 0; i < suv.count; i++) suv.setY(i, suv.getY(i) * L * 0.45);
+          const sleeve = new THREE.Mesh(
+            sleeveGeo,
+            new THREE.MeshBasicMaterial({
+              map: LANE_TEX,
+              color: on ? 0xffc870 : 0x5fd0ff,
+              transparent: true,
+              opacity: on ? 0.8 : 0.5,
+              blending: THREE.AdditiveBlending,
+              depthWrite: false,
+              side: THREE.DoubleSide,
+              toneMapped: false,
+            }),
+          );
+          sleeve.position.copy(mid);
+          sleeve.quaternion.copy(q);
+          board.add(sleeve);
           const hitbox = new THREE.Mesh(
             new THREE.CylinderGeometry(0.2, 0.2, L, 6),
             basic(0xffffff, 0, false),
@@ -2047,22 +2671,56 @@
             R = nodeR(n);
           if (n.kind === "planet") {
             const T = TYPES[n.type] || TYPES.rock,
+              traits = TRAITS[n.type] || TRAITS.rock,
               tex = planetTexture(n.type, seedOf(n.id));
-            const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0 });
+            const mat = new THREE.MeshStandardMaterial({
+              map: tex.map,
+              roughness: n.type === "ocean" ? 0.55 : 0.9,
+              metalness: 0,
+            });
+            if (traits.bump) {
+              mat.bumpMap = tex.bump;
+              mat.bumpScale = traits.bump;
+            }
             if (T.emis) {
-              mat.emissiveMap = tex;
+              mat.emissiveMap = tex.map;
               mat.emissive = new THREE.Color(T.emis[0]);
               mat.emissiveIntensity = T.emis[1];
             }
-            const m = new THREE.Mesh(new THREE.SphereGeometry(R, 48, 32), mat);
+            const m = new THREE.Mesh(new THREE.SphereGeometry(R, 64, 40), mat);
             m.rotation.z = 0.3;
-            m.userData = { kind: "node", id: n.id };
+            m.userData = {
+              kind: "node",
+              id: n.id,
+              tex: tex.key,
+              spin: 0.12,
+              turn: (seedOf(n.id) % 628) / 100,
+            };
             g.add(m);
             pickables.push(m);
             spinners.push(m);
-            g.add(glowSprite(T.atm, R * 3.3, 0.5));
+            if (traits.clouds) {
+              const cl = new THREE.Mesh(
+                new THREE.SphereGeometry(R * 1.018, 48, 32),
+                new THREE.MeshStandardMaterial({
+                  map: CLOUDS,
+                  transparent: true,
+                  opacity: traits.clouds,
+                  roughness: 1,
+                  depthWrite: false,
+                }),
+              );
+              cl.rotation.z = 0.3;
+              cl.userData = { spin: 0.19, turn: (seedOf(n.id) % 311) / 50 };
+              g.add(cl);
+              spinners.push(cl);
+            }
+            if (traits.air) {
+              g.add(airShell(R, T.atm, false), airShell(R, T.atm, true));
+              g.add(glowSprite(T.atm, R * 3.4, 0.22));
+            } else g.add(glowSprite(T.atm, R * 3.0, 0.3));
             if (n.ring) {
-              const rg = flat(new THREE.RingGeometry(R * 1.35, R * 2.05, 64), basic(T.atm, 0.38, false));
+              const rg = ringMesh(R * 1.35, R * 2.1, T.atm, 0.7);
               rg.rotation.x = -Math.PI / 2 + 0.45;
               rg.rotation.y = 0.2;
               g.add(rg);
@@ -2086,8 +2744,25 @@
                 ),
               );
             }
-            if (n.capital)
+            if (n.capital) {
               g.add(flat(new THREE.RingGeometry(base + 0.2, base + 0.25, 64), basic(0xffd76a, 0.9, true)));
+              // a beacon over the capital
+              const beacon = new THREE.Mesh(
+                new THREE.CylinderGeometry(0.012, 0.045, 1.7, 12, 1, true),
+                new THREE.MeshBasicMaterial({
+                  map: BEAM_TEX,
+                  color: 0xffd76a,
+                  transparent: true,
+                  opacity: 0.5,
+                  blending: THREE.AdditiveBlending,
+                  depthWrite: false,
+                  side: THREE.DoubleSide,
+                  toneMapped: false,
+                }),
+              );
+              beacon.position.y = R + 0.85;
+              g.add(beacon);
+            }
             if (on) g.add(reticle(base + 0.42));
             const fo = fullOwner(n),
               pips = n.maps
@@ -2145,22 +2820,20 @@
           const g = new THREE.Group(),
             col = new THREE.Color(state.players[f.owner].color),
             on = selFleet === f;
-          const geo = new THREE.ConeGeometry(0.19, 0.7, 4);
-          geo.rotateX(Math.PI / 2);
-          geo.scale(1.35, 0.42, 1);
-          g.add(
-            new THREE.Mesh(
-              geo,
-              new THREE.MeshStandardMaterial({
-                color: col,
-                emissive: col,
-                emissiveIntensity: 0.9,
-                roughness: 0.5,
-                flatShading: true,
-              }),
-            ),
-          );
-          g.add(glowSprite(col, on ? 1.6 : 1.0, on ? 0.95 : 0.7));
+          const hull = new THREE.MeshStandardMaterial({
+            color: col,
+            emissive: col,
+            emissiveIntensity: 0.55,
+            roughness: 0.45,
+            metalness: 0.2,
+            flatShading: true,
+            side: THREE.DoubleSide,
+          });
+          g.add(new THREE.Mesh(SHIP_GEO, hull), new THREE.Mesh(BRIDGE_GEO, hull));
+          const engines = glowSprite(0xbfe9ff, 0.34, 1);
+          engines.position.set(0, 0.02, -0.34);
+          g.add(engines);
+          g.add(glowSprite(col, on ? 1.5 : 0.95, on ? 0.9 : 0.55));
           if (on) g.add(reticle(0.42));
           const hb = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 6), basic(0xffffff, 0, false));
           hb.userData = { kind: "fleet", id: f.id };
@@ -2252,7 +2925,9 @@
           cam.target.z + cam.r * sp * Math.cos(cam.theta),
         );
         camera.lookAt(cam.target);
-        for (const m of spinners) m.rotation.y += dt * 0.12;
+        // spin from the clock, not by adding up, so a redraw of the board does not snap planets back
+        for (const m of spinners) m.rotation.y = t * m.userData.spin + m.userData.turn;
+        LANE_TEX.offset.y = -t * 0.55;
         for (const r of reticles) r.rotation.y = t * 0.9;
         for (const p of pulses) {
           const s = 1 + 0.08 * Math.sin(t * 5);
@@ -2528,7 +3203,7 @@
               '<div class="row"><label>Capital</label><input type="checkbox" data-f="capital"' +
               (n.capital ? " checked" : "") +
               (canBeCapital(n) ? "" : " disabled") +
-              '><span style="color:var(--dim);font-size:11px">' +
+              '><span style="color:var(--dim);font-size:13px">' +
               (canBeCapital(n)
                 ? "+" + state.rules.capitalBonus + "/turn to whoever holds it"
                 : "Only a planet with exactly one map can be a capital") +
@@ -2686,9 +3361,7 @@
               (cardIsOpen(i) ? "fold" : "open") +
               ' this commander"><b>' +
               esc(p.name) +
-              "</b><span>" +
-              esc(sideOf(i, "c") + " / " + sideOf(i, "g")) +
-              '</span><span class="rt">' +
+              '</b><span class="rt">' +
               (p.lastStandAt !== null
                 ? '<span class="tag" title="Last stand called: their next turn is used up">Last stand</span>'
                 : state.current === i
@@ -2720,6 +3393,8 @@
               i +
               ':50">+</button></div>' +
               '<div class="st">' +
+              esc(sideOf(i, "c") + " / " + sideOf(i, "g")) +
+              "<br>" +
               mapsOwned(i) +
               " maps · " +
               fl.length +
@@ -3099,7 +3774,7 @@
             return (
               '<div class="row"><b style="flex:0 0 150px">' +
               x[1] +
-              '</b><span style="flex:1;color:var(--dim);font-size:11px">' +
+              '</b><span style="flex:1;color:var(--dim);font-size:13px">' +
               x[2] +
               (x[3] ? "" : " Not in space.") +
               "</span>" +
@@ -3248,8 +3923,8 @@
               })
               .join("");
             h +=
-              '<div class="row" style="flex-wrap:wrap;margin:-2px 0 8px 16px"><span style="color:var(--dim);font-size:10px;text-transform:uppercase">Bonuses</span>' +
-              (chipsHtml || '<span style="color:var(--dim);font-size:11px">none in hand</span>') +
+              '<div class="row" style="flex-wrap:wrap;margin:-2px 0 8px 16px"><span style="color:var(--dim);font-size:12px;text-transform:uppercase">Bonuses</span>' +
+              (chipsHtml || '<span style="color:var(--dim);font-size:13px">none in hand</span>') +
               "</div>";
           });
           h +=
