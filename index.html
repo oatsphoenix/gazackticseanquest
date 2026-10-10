@@ -1194,6 +1194,40 @@
         document.body.appendChild(frame);
         setTimeout(() => frame.remove(), 3000);
         toast("Asked the launcher to start " + mission);
+        // A page cannot ask Windows whether the launcher exists. What it can see is the browser losing
+        // focus, which happens when the launcher (or the browser's "open this link?" box) comes up.
+        // No loss of focus within a few seconds is taken to mean there is no launcher on this PC.
+        if (localStorage.getItem(LAUNCHER_FLAG)) return;
+        let seen = false;
+        const saw = () => (seen = true);
+        addEventListener("blur", saw);
+        document.addEventListener("visibilitychange", saw);
+        setTimeout(() => {
+          removeEventListener("blur", saw);
+          document.removeEventListener("visibilitychange", saw);
+          if (seen) return localStorage.setItem(LAUNCHER_FLAG, "1");
+          modal = { kind: "launcher", mission };
+          renderModal();
+        }, 2500);
+      }
+      const LAUNCHER_FLAG = "gazacktic-seanquest.launcher"; // set once the launcher is known to be on this PC
+      const LAUNCHER_URL = "https://oatsphoenix.github.io/gazackticseanquest/mods/install-launcher.bat";
+      function renderLauncherModal() {
+        $("modalBox").innerHTML =
+          "<h2>Launcher not found on this PC</h2>" +
+          '<div class="mtext">Launch game needs a small helper installed once on each Windows PC. It did not respond, so it is probably not installed here yet.</div>' +
+          '<div class="mlabel">Install it</div><ol>' +
+          '<li>Download <a href="' +
+          LAUNCHER_URL +
+          '" download style="color:var(--or)">install-launcher.bat</a>.</li>' +
+          "<li>Double-click it. If Windows asks whether to run it, choose Run (or More info, then Run anyway).</li>" +
+          "<li>It finds Battlefront II and sets the launcher up. Nothing else is changed.</li>" +
+          "<li>Come back here and press Try again. The first time, your browser asks whether to open the link: allow it.</li></ol>" +
+          '<div class="hint" style="margin-top:10px">The mission for this battle is <span class="code">' +
+          esc(modal.mission) +
+          "</span>. Without the launcher you can still start it by hand from the steps on the battle card.</div>" +
+          '<div class="grid go"><button class="btn on" data-act="launchretry">Try again</button><button class="btn" data-act="launcherok" title="Use this if the game did start">It is installed: stop asking</button></div>' +
+          '<div class="grid" style="margin-top:6px"><span></span><button class="btn" data-act="launcherback">Back to the battle</button></div>';
       }
       function endTurn() {
         if (state.phase === "draft") return toast("Finish picking planets first");
@@ -3120,7 +3154,7 @@
           "</span></div>" +
           '<div class="grid"><button class="btn on" data-act="launch"' +
           (mission ? "" : " disabled") +
-          ' title="Needs the launcher installed by mods/install-mods on this PC">Launch game</button>' +
+          ' title="Starts Battlefront II on this mission. Needs the launcher installed on this PC; you are offered it if it is missing.">Launch game</button>' +
           '<button class="btn" data-act="bcopy"' +
           (mission ? "" : " disabled") +
           ">Copy mission code</button></div>";
@@ -3189,6 +3223,7 @@
         if (modal.kind === "online") return renderOnlineModal();
         if (modal.kind === "battle") return renderBattleModal();
         if (modal.kind === "shop") return renderShopModal();
+        if (modal.kind === "launcher") return renderLauncherModal();
         if (modal.kind === "confirm") {
           $("modalBox").innerHTML =
             "<h2>Are you sure?</h2>" +
@@ -3392,6 +3427,26 @@
             break;
           case "launch":
             launchGame(battleMission(state.battle));
+            break;
+          case "launchretry": {
+            const mission = modal.mission;
+            modal = state.battle ? { kind: "battle" } : null;
+            renderModal();
+            launchGame(mission);
+            break;
+          }
+          case "launcherok":
+            localStorage.setItem(LAUNCHER_FLAG, "1");
+            modal = state.battle ? { kind: "battle" } : null;
+            renderModal();
+            break;
+          case "launcherback":
+            modal = state.battle ? { kind: "battle" } : null;
+            renderModal();
+            break;
+          case "launcherhelp":
+            modal = { kind: "launcher", mission: battleMission(state.battle) };
+            renderModal();
             break;
           case "bcopy":
             if (navigator.clipboard)

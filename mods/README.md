@@ -66,6 +66,10 @@ can start the game on the right mission. It registers a `seanquest://` link type
 and puts `seanquest-launch.ps1` in `GameData`. The launcher only accepts a mission code in the game's
 own format, such as `cor1c_con`; any other link is refused and noted in `seanquest-launch.log`.
 
+If the launcher is not on a PC, the board notices when you press Launch game (nothing responds) and
+offers `install-launcher.bat`. That one file fetches the current installer script from this project and
+installs only the launcher. It is the same as `install-mods.bat -LauncherOnly`.
+
 **This is untested against the real game.** Try it first:
 
 ```
@@ -89,6 +93,7 @@ install-mods.bat -Undo ai                   take one mod back out (also: -Undo x
 install-mods.bat -MakeSetList               rewrite setlist.json from this PC's install
 install-mods.bat -NoSetList                 ignore the set list and choose mods freely
 install-mods.bat -TestLaunch cor1c_con      start the game on a mission through the launcher
+install-mods.bat -LauncherOnly              install only the launcher
 install-mods.bat -NoLauncher                install mods without the launcher
 install-mods.bat -RemoveLauncher            remove the launcher again
 install-mods.bat -Only bf1-maps,xbox-dlc    install just these

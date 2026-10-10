@@ -35,6 +35,8 @@
   Install the launcher if needed, then start the game on this mission code, e.g. -TestLaunch cor1c_con
 .PARAMETER RemoveLauncher
   Remove the launcher (its seanquest:// link type and its script).
+.PARAMETER LauncherOnly
+  Install just the launcher and touch nothing else. This is what install-launcher.bat runs.
 #>
 [CmdletBinding()]
 param(
@@ -49,7 +51,8 @@ param(
     [switch]$NoSetList,
     [switch]$NoLauncher,
     [string]$TestLaunch,
-    [switch]$RemoveLauncher
+    [switch]$RemoveLauncher,
+    [switch]$LauncherOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -906,6 +909,9 @@ function Invoke-Main {
         if ($Yes) { $argList += '-Yes' }
         if ($Force) { $argList += '-Force' }
         if ($NoShortcut) { $argList += '-NoShortcut' }
+        if ($LauncherOnly) { $argList += '-LauncherOnly' }
+        if ($NoLauncher) { $argList += '-NoLauncher' }
+        if ($TestLaunch) { $argList += '-TestLaunch'; $argList += $TestLaunch }
         if ($Only) { $argList += '-Only'; $argList += ($Only -join ',') }
         Start-Process powershell -Verb RunAs -ArgumentList $argList
         exit 0
@@ -922,6 +928,11 @@ function Invoke-Main {
     $script:Installed = $installed
     $script:Clashes = @()
 
+    if ($LauncherOnly) {
+        Write-Step 'Game launcher'
+        if (Register-Launcher $gameData) { Write-Info 'Go back to the game board and press Launch game again.' }
+        return
+    }
     if ($RemoveLauncher) { Write-Step 'Removing the launcher'; Unregister-Launcher $gameData; return }
     if ($TestLaunch) {
         Write-Step "Test launch: $TestLaunch"
