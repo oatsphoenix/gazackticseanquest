@@ -129,6 +129,12 @@
         color: var(--dim);
         font-size: 12px;
       }
+      /* the tag under a blockaded lane's X, in the colour of the commander who closed it */
+      .lbl.blk {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+      }
 
       .panel {
         position: fixed;
@@ -980,7 +986,11 @@
         ["b_shielding", "Bonus: Combat Shielding", 300],
         ["b_blasters", "Bonus: Enhanced Blasters", 300],
         ["b_sabotage", "Bonus: Sabotage", 300],
+        ["blockade", "Bonus: Blockade", 400],
+        ["blockadeTurns", "Blockade: turns", 2, 1], // optional 4th value: the step of the rules box
       ];
+      // How long a blockade lasts, in turns of each commander (a turn = both commanders playing once).
+      const blockadeTurns = () => Math.max(1, Math.round(state.rules.blockadeTurns || 0));
 
       // The Galactic Conquest bonuses: key, name, what it does, and whether it works in space battles.
       // The name is exactly what the game's Fake Console calls it ("Bonus 1 <name>" / "Bonus 2 <name>").
@@ -1245,6 +1255,11 @@
         s.lanes = s.lanes.filter((l) => ids.has(l.a) && ids.has(l.b));
         s.lanes.forEach((l) => {
           l.value = +l.value || 1;
+          // a blockade: who closed the lane, and the ply at which it opens again
+          const bk = l.blockade;
+          if (bk && (bk.by === 0 || bk.by === 1) && +bk.until > (+s.ply || 0))
+            l.blockade = { by: bk.by, until: +bk.until };
+          else delete l.blockade;
         });
         s.fleets = (s.fleets || []).filter((f) => ids.has(f.node) && (f.owner === 0 || f.owner === 1));
         s.log = Array.isArray(s.log) ? s.log.map(String) : [];
@@ -1290,6 +1305,7 @@
       let shownBattle = ""; // the battle whose card has already been popped up on this screen
       let logOpen = false; // the log is a tab at the bottom edge until pulled up
       let placing = null, // commander index while choosing where a new fleet deploys
+        blockading = null, // commander index while choosing the lane to blockade
         modal = null; // open dialog: { kind: "confirm" | "newgame", ... }
       let edit = false,
         tool = "select",
@@ -1332,10 +1348,18 @@
           c += state.rules.moveBase * 2 ** (state.players[pi].movesBought + k);
         return c;
       }
-      // Edit mode moves are free corrections; in play the commander must afford the lane.
+      // A blockaded lane is closed to every fleet, both commanders', until it opens again.
+      const blockaded = (l) => !!(l && l.blockade && state.ply < l.blockade.until);
+      // Turns left on a blockade, counted the way the turn counter counts them.
+      const blockadeLeft = (l) => Math.ceil((l.blockade.until - state.ply) / 2);
+      const laneName = (l) => (nodeById(l.a) || {}).name + " ↔ " + (nodeById(l.b) || {}).name;
+      // Edit mode moves are free corrections and ignore blockades; in play the commander must afford
+      // the lane, and it must be open.
       const canReach = (f, id) => {
         const l = laneBetween(f.node, id);
-        return !!l && (edit || moveCostVia(f.owner, l) <= state.players[f.owner].credits);
+        return (
+          !!l && (edit || (!blockaded(l) && moveCostVia(f.owner, l) <= state.players[f.owner].credits))
+        );
       };
       // Where a new fleet may deploy: a planet the commander holds a map on (any planet if they hold none).
       function fleetSpots(pi) {
@@ -1377,6 +1401,7 @@
         sel = null;
         laneStart = null;
         placing = null;
+        blockading = null;
         commit();
       }
       let toastT;
@@ -1421,7 +1446,20 @@
           else if (fleetCost(pi) > p.credits) return toast(p.name + " needs " + fleetCost(pi) + " credits");
           else {
             placing = pi;
+            blockading = null;
             sel = null;
+          }
+          return commit();
+        } else if (what === "blockade") {
+          // pick the lane first; the credits are only spent once the choice is confirmed
+          if (blockading === pi) blockading = null;
+          else if (r.blockade > p.credits) return toast(p.name + " needs " + r.blockade + " credits");
+          else if (!state.lanes.some((l) => !blockaded(l))) return toast("Every lane is already blockaded");
+          else {
+            blockading = pi;
+            placing = null;
+            modal = null;
+            toast("Click a lane to blockade it");
           }
           return commit();
         } else if (what === "faction") {
@@ -1465,6 +1503,42 @@
           },
         };
         renderModal();
+      }
+      // Closes a lane to every fleet for a number of turns. Paid for when confirmed.
+      function confirmBlockade(pi, lane) {
+        const p = state.players[pi],
+          cost = state.rules.blockade,
+          turns = blockadeTurns();
+        modal = {
+          kind: "confirm",
+          text:
+            "Blockade the lane " +
+            laneName(lane) +
+            " for " +
+            turns +
+            (turns === 1 ? " turn" : " turns") +
+            ", for " +
+            cost +
+            " credits? No fleet can cross it until then.",
+          onYes: () => {
+            blockading = null;
+            if (blockaded(lane)) toast("That lane is already blockaded");
+            else if (spend(pi, cost, "a blockade on " + laneName(lane))) {
+              // a turn is one ply for each commander, so it opens again at the start of the buyer's
+              // turn once the other commander has had that many turns
+              lane.blockade = { by: pi, until: state.ply + turns * 2 };
+              sel = { kind: "lane", id: lane.id };
+            }
+            commit();
+          },
+        };
+        renderModal();
+      }
+      function liftBlockade(lane) {
+        mutate(() => {
+          delete lane.blockade;
+          log("Blockade lifted on " + laneName(lane));
+        });
       }
       // Records who won. Ends the battle being set up, and uses up any hero fielded in it.
       function battle(node, mapIdx, winner) {
@@ -1613,6 +1687,7 @@
         if (state.phase === "draft") return toast("Finish picking planets first");
         if (!edit && !mySeat(state.current)) return turnToast();
         placing = null;
+        blockading = null;
         mutate(() => {
           const pi = state.current,
             p = state.players[pi],
@@ -1633,6 +1708,11 @@
           state.ply++;
           state.current = 1 - pi;
           if (state.current === 0) state.turn++;
+          for (const l of state.lanes)
+            if (l.blockade && state.ply >= l.blockade.until) {
+              delete l.blockade;
+              log("Blockade lifted on " + laneName(l));
+            }
         });
       }
       function rollEra() {
@@ -1649,6 +1729,11 @@
         const lane = laneBetween(f.node, to.id),
           p = state.players[f.owner],
           cost = edit ? 0 : moveCostVia(f.owner, lane);
+        if (!edit && blockaded(lane))
+          return toast(
+            "That lane is under " + state.players[lane.blockade.by].name + "'s blockade for " +
+              blockadeLeft(lane) + (blockadeLeft(lane) === 1 ? " more turn" : " more turns"),
+          );
         if (cost > p.credits) return toast("Moving there costs " + cost + " credits");
         mutate(() => {
           const from = nodeById(f.node);
@@ -1665,12 +1750,14 @@
       function startNewGame(o) {
         edit = false;
         placing = null;
+        blockading = null;
         mutate(() => {
           const first = o.first === "random" ? (Math.random() < 0.5 ? 0 : 1) : +o.first;
           state.nodes.forEach((n) => {
             (n.maps || []).forEach((m) => (m.owner = -1));
             if (o.capitals && n.kind === "planet") n.capital = false;
           });
+          state.lanes.forEach((l) => delete l.blockade);
           state.players.forEach((p) => {
             p.credits = state.rules.startCredits;
             BONUSES.forEach((b) => (p.bonuses[b[0]] = 0));
@@ -2534,6 +2621,7 @@
         reticles = [],
         pulses = [],
         lanePulses = [],
+        blockMarks = [],
         labels = [];
       const fleetObjs = new Map(),
         fleetPos = new Map();
@@ -2602,6 +2690,7 @@
         reticles = [];
         pulses = [];
         lanePulses = [];
+        blockMarks = [];
         labels = [];
         fleetObjs.clear();
         labelRoot.innerHTML = "";
@@ -2631,33 +2720,57 @@
             mid = p0.clone().add(p1).multiplyScalar(0.5),
             on = sel && sel.kind === "lane" && sel.id === l.id;
           const q = new THREE.Quaternion().setFromUnitVectors(Y, dir);
-          const beam = new THREE.Mesh(
-            new THREE.CylinderGeometry(on ? 0.05 : 0.022, on ? 0.05 : 0.022, L, 6),
-            basic(on ? 0xffb648 : 0x39c5ff, on ? 0.9 : 0.42, true),
-          );
-          beam.position.copy(mid);
-          beam.quaternion.copy(q);
-          board.add(beam);
-          // the flow: a wider sleeve carrying the dash texture, stretched to repeat about once per unit
-          const sleeveGeo = new THREE.CylinderGeometry(on ? 0.075 : 0.045, on ? 0.075 : 0.045, L, 8, 1, true),
-            suv = sleeveGeo.attributes.uv;
-          for (let i = 0; i < suv.count; i++) suv.setY(i, suv.getY(i) * L * 0.45);
-          const sleeve = new THREE.Mesh(
-            sleeveGeo,
-            new THREE.MeshBasicMaterial({
-              map: LANE_TEX,
-              color: on ? 0xffc870 : 0x5fd0ff,
-              transparent: true,
-              opacity: on ? 0.8 : 0.5,
-              blending: THREE.AdditiveBlending,
-              depthWrite: false,
-              side: THREE.DoubleSide,
-              toneMapped: false,
-            }),
-          );
-          sleeve.position.copy(mid);
-          sleeve.quaternion.copy(q);
-          board.add(sleeve);
+          const blk = blockaded(l),
+            // while a commander is choosing a lane to blockade, the open lanes light up green
+            pickMe = blockading !== null && !blk;
+          if (blk) {
+            // the lane is closed: no beam, just an X in the colour of the commander who closed it
+            const col = state.players[l.blockade.by].color,
+              mark = new THREE.Group();
+            mark.position.set(mid.x, 0.02, mid.z);
+            mark.rotation.y = Math.atan2(dir.x, dir.z);
+            for (const turn of [Math.PI / 4, -Math.PI / 4]) {
+              // a coloured bar with a bright core, so it reads like the glowing lanes it replaces
+              const bar = flat(new THREE.PlaneGeometry(0.95, 0.17), basic(col, 1, true)),
+                core = flat(new THREE.PlaneGeometry(0.85, 0.05), basic(0xffffff, 0.55, true));
+              bar.rotation.z = core.rotation.z = turn;
+              core.position.y = 0.005;
+              mark.add(bar, core);
+            }
+            mark.add(glowSprite(col, 2, 0.55));
+            board.add(mark);
+            blockMarks.push(mark);
+          } else {
+            const hot = on || pickMe,
+              beamCol = on ? 0xffb648 : pickMe ? 0x2fe36a : 0x39c5ff;
+            const beam = new THREE.Mesh(
+              new THREE.CylinderGeometry(hot ? 0.05 : 0.022, hot ? 0.05 : 0.022, L, 6),
+              basic(beamCol, on ? 0.9 : pickMe ? 0.7 : 0.42, true),
+            );
+            beam.position.copy(mid);
+            beam.quaternion.copy(q);
+            board.add(beam);
+            // the flow: a wider sleeve carrying the dash texture, stretched to repeat about once per unit
+            const sleeveGeo = new THREE.CylinderGeometry(hot ? 0.075 : 0.045, hot ? 0.075 : 0.045, L, 8, 1, true),
+              suv = sleeveGeo.attributes.uv;
+            for (let i = 0; i < suv.count; i++) suv.setY(i, suv.getY(i) * L * 0.45);
+            const sleeve = new THREE.Mesh(
+              sleeveGeo,
+              new THREE.MeshBasicMaterial({
+                map: LANE_TEX,
+                color: on ? 0xffc870 : pickMe ? 0x3cff7e : 0x5fd0ff,
+                transparent: true,
+                opacity: on ? 0.8 : pickMe ? 0.55 : 0.5,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false,
+                side: THREE.DoubleSide,
+                toneMapped: false,
+              }),
+            );
+            sleeve.position.copy(mid);
+            sleeve.quaternion.copy(q);
+            board.add(sleeve);
+          }
           const hitbox = new THREE.Mesh(
             new THREE.CylinderGeometry(0.2, 0.2, L, 6),
             basic(0xffffff, 0, false),
@@ -2667,6 +2780,18 @@
           hitbox.userData = { kind: "lane", id: l.id };
           board.add(hitbox);
           pickables.push(hitbox);
+          if (blk) {
+            const left = blockadeLeft(l);
+            addLabel(
+              "blk",
+              "Blockade · " + left + (left === 1 ? " turn" : " turns"),
+              mid.x,
+              mid.z,
+              0.34,
+              state.players[l.blockade.by].color,
+            );
+            continue;
+          }
           const sp = glowSprite(0x9fe4ff, 0.35, 0.9);
           board.add(sp);
           lanePulses.push({ sp, p0, p1, off: (seedOf(l.id) % 100) / 100 });
@@ -2945,6 +3070,7 @@
           p.material.opacity = 0.55 + 0.4 * Math.sin(t * 5);
         }
         for (const lp of lanePulses) lp.sp.position.lerpVectors(lp.p0, lp.p1, (t * 0.12 + lp.off) % 1);
+        for (const m of blockMarks) m.scale.setScalar(1 + 0.07 * Math.sin(t * 3));
         galaxy.rotation.y = t * 0.006;
         updateFleets(t, dt);
         renderer.render(scene, camera);
@@ -2964,7 +3090,11 @@
       function pick(e) {
         aim(e);
         const hits = ray.intersectObjects(pickables, false);
-        const h = hits.find((x) => x.object.userData.kind !== "lane") || hits[0];
+        // planets and fleets win over the lanes under them, except while picking a lane to blockade
+        const h =
+          blockading !== null
+            ? hits.find((x) => x.object.userData.kind === "lane")
+            : hits.find((x) => x.object.userData.kind !== "lane") || hits[0];
         return h ? h.object.userData : null;
       }
       function groundPoint(e) {
@@ -3058,6 +3188,12 @@
           if (hit && hit.kind === "node" && fleetSpots(placing).some((n) => n.id === hit.id))
             return confirmFleet(placing, nodeById(hit.id));
           return toast("Pick a pulsing planet for the new fleet");
+        }
+        if (blockading !== null) {
+          const l = hit && hit.kind === "lane" ? state.lanes.find((x) => x.id === hit.id) : null;
+          if (!l) return toast("Click a lane to blockade, or press Esc to cancel");
+          if (blockaded(l)) return toast("That lane is already blockaded");
+          return confirmBlockade(blockading, l);
         }
         if (state.phase === "draft" && !edit && hit && hit.kind === "node" && isUnclaimed(nodeById(hit.id)))
           return mySeat(state.current) ? draftPick(nodeById(hit.id)) : turnToast();
@@ -3179,7 +3315,19 @@
       function renderSelection() {
         const dis = edit ? "" : " disabled";
         let h = "";
-        if (!sel)
+        if (blockading !== null)
+          h =
+            '<div class="hint">' +
+            esc(state.players[blockading].name) +
+            ": click a <b style=\"color:#9dffb0\">green lane</b> to blockade it. No fleet can cross it for " +
+            blockadeTurns() +
+            (blockadeTurns() === 1 ? " turn" : " turns") +
+            ". You pay " +
+            state.rules.blockade +
+            ' credits once you confirm.</div><div class="row"><button class="btn" data-act="buy:' +
+            blockading +
+            ':blockade">Cancel blockade</button></div>';
+        else if (!sel)
           h =
             state.phase === "draft" && !edit
               ? '<div class="hint">Click a pulsing planet to claim it.<br><br><b style="color:var(--or)">Planets are not equal:</b> each has a different number of maps, shown under its name. More maps means more income every turn, but more battles to take it or to lose it.' +
@@ -3286,8 +3434,40 @@
             l.value +
             '"' +
             dis +
-            "></div>" +
-            '<div class="row edit-only"><button class="btn warn" data-act="delsel">Delete lane</button></div>';
+            "></div>";
+          if (blockaded(l)) {
+            const by = state.players[l.blockade.by],
+              left = blockadeLeft(l);
+            h +=
+              '<div class="hint" style="color:' +
+              by.color +
+              '">Blockaded by ' +
+              esc(by.name) +
+              ": closed to every fleet for " +
+              left +
+              (left === 1 ? " more turn." : " more turns.") +
+              "</div>" +
+              '<div class="row edit-only"><button class="btn" data-act="liftblockade">Lift blockade</button></div>';
+          } else if (state.phase !== "draft") {
+            // the commander whose turn it is can close this lane from here
+            const pi = state.current,
+              p = state.players[pi],
+              can = edit || (mySeat(pi) && p.credits >= state.rules.blockade);
+            h +=
+              '<div class="row"><button class="btn" data-act="blockadesel:' +
+              pi +
+              '"' +
+              (can ? "" : " disabled") +
+              ' title="Close this lane to every fleet for ' +
+              blockadeTurns() +
+              (blockadeTurns() === 1 ? " turn" : " turns") +
+              '">Blockade · ' +
+              esc(p.name) +
+              " · " +
+              state.rules.blockade +
+              "</button></div>";
+          }
+          h += '<div class="row edit-only"><button class="btn warn" data-act="delsel">Delete lane</button></div>';
         } else {
           const f = state.fleets.find((x) => x.id === sel.id);
           if (!f) {
@@ -3519,6 +3699,7 @@
         net.lastJson = JSON.stringify(state);
         if (!keepUndo) undoStack.length = 0; // undo reaches back only to the other side's last action
         placing = null;
+        blockading = null;
         if (modal && modal.kind === "confirm") modal = null;
         if (sel && sel.kind === "node" && !nodeById(sel.id)) sel = null;
         if (sel && sel.kind === "fleet" && !state.fleets.some((f) => f.id === sel.id)) sel = null;
@@ -3803,6 +3984,20 @@
               "</button></div>"
             );
           }).join("") +
+          '<h2 style="margin-top:12px">On the map</h2>' +
+          '<div class="hint" style="min-height:0;margin:0 0 8px">Used straight away, not held for a battle.</div>' +
+          '<div class="row"><b style="flex:0 0 150px">Blockade</b><span style="flex:1;color:var(--dim);font-size:13px">Close one lane to every fleet for ' +
+          blockadeTurns() +
+          (blockadeTurns() === 1 ? " turn" : " turns") +
+          ". Pick the lane next.</span>" +
+          '<span style="flex:0 0 22px"></span>' +
+          '<button class="btn" style="flex:0 0 78px" data-act="buy:' +
+          i +
+          ':blockade"' +
+          (locked || state.rules.blockade > p.credits ? " disabled" : "") +
+          ">Use " +
+          state.rules.blockade +
+          "</button></div>" +
           '<div class="grid go"><span></span><button class="btn" data-act="modal-no">Close</button></div>';
       }
 
@@ -4136,7 +4331,9 @@
         (r) =>
           '<div class="row"><label style="flex-basis:150px">' +
           r[1] +
-          '</label><input type="number" min="0" step="50" id="rule-' +
+          '</label><input type="number" min="0" step="' +
+          (r[3] || 50) +
+          '" id="rule-' +
           r[0] +
           '" data-f="rule" data-i="' +
           r[0] +
@@ -4156,6 +4353,7 @@
             break;
           case "mode":
             placing = null;
+            blockading = null;
             edit = !edit;
             tool = "select";
             laneStart = null;
@@ -4202,6 +4400,23 @@
           case "buybonus":
             buyBonus(+a, c);
             break;
+          case "blockadesel": {
+            // blockade the selected lane straight from the selection panel
+            const l = sel && sel.kind === "lane" ? state.lanes.find((x) => x.id === sel.id) : null,
+              pi = +a;
+            if (!l) break;
+            if (!edit && !mySeat(pi)) toast("You are not playing " + state.players[pi].name);
+            else if (offTurn(pi)) turnToast();
+            else if (state.players[pi].credits < state.rules.blockade)
+              toast(state.players[pi].name + " needs " + state.rules.blockade + " credits");
+            else confirmBlockade(pi, l);
+            break;
+          }
+          case "liftblockade": {
+            const l = sel && sel.kind === "lane" ? state.lanes.find((x) => x.id === sel.id) : null;
+            if (l && l.blockade) liftBlockade(l);
+            break;
+          }
           case "buse":
             if (online() && !edit && !mySeat(+a)) toast("You are not playing " + state.players[+a].name);
             else
@@ -4442,6 +4657,7 @@
           undo();
         } else if (e.key === "Escape") {
           placing = null;
+          blockading = null;
           modal = null;
           sel = null;
           laneStart = null;
