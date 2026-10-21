@@ -2540,13 +2540,23 @@
       const labelRoot = $("labels");
       const Y = new THREE.Vector3(0, 1, 0);
 
-      function disposeGroup(g) {
-        g.traverse((o) => {
-          if (o.geometry && o.geometry !== SHIP_GEO && o.geometry !== BRIDGE_GEO) o.geometry.dispose();
-          if (o.material && o.material.map !== GLOW) o.material.dispose();
-          else if (o.material) o.material.dispose();
-        });
+      // Objects taken off the board wait here until the next frame has been drawn. Freeing them
+      // straight away would also free their shader programs (nothing else is using them yet), so the
+      // rebuilt board would have to compile every shader again, freezing the screen for a moment on
+      // each click. Freed after a render, the new objects have already picked up the same programs.
+      let retired = [];
+      function retireGroup(g) {
+        retired.push(...g.children);
         g.clear();
+      }
+      function disposeRetired() {
+        if (!retired.length) return;
+        for (const obj of retired)
+          obj.traverse((o) => {
+            if (o.geometry && o.geometry !== SHIP_GEO && o.geometry !== BRIDGE_GEO) o.geometry.dispose();
+            if (o.material) o.material.dispose();
+          });
+        retired = [];
       }
       const flat = (geo, mat) => {
         const m = new THREE.Mesh(geo, mat);
@@ -2585,8 +2595,8 @@
       }
 
       function syncScene() {
-        disposeGroup(board);
-        disposeGroup(fleetLayer);
+        retireGroup(board);
+        retireGroup(fleetLayer);
         pickables = [];
         spinners = [];
         reticles = [];
@@ -2938,6 +2948,7 @@
         galaxy.rotation.y = t * 0.006;
         updateFleets(t, dt);
         renderer.render(scene, camera);
+        disposeRetired();
         updateLabels();
         requestAnimationFrame(frame);
       }
